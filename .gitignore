@@ -1,0 +1,46 @@
+# Build outputs
+*.o
+/irodori
+/irodori-blas
+/irodori-mkl
+/irodori-mkl.bin
+/irodori_asan
+/irodori-baseline-*
+/irodori-bench-worker
+/irodori-bench-worker-mkl
+/irodori-bench-worker-mkl.bin
+
+# Generated model assets and reference tensors
+/weights/
+/golden/
+
+# Local benchmark and profiling artifacts
+/.bench-*
+/.profile-*
+/.irodori-*
+/benchmark-results/
+*.wav
+*.log
+
+# Local agent context and implementation notes
+/AGENT.md
+/AGENTS.md
+/agent.md
+/plan.md
+/PLAN.md
+/OPTIMIZATION_PLAN.md
+/PERFORMANCE.md
+/MODEL.md
+/model.md
+/CLAUDE.md
+/CODEX.md
+/docs/
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.venv/
+
+# Editor and OS files
+.DS_Store
+*.swp
