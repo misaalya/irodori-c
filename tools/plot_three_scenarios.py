@@ -92,7 +92,7 @@ def grouped(ax, rows, key, ylabel, title, whisk=True, annotate_speedup=False, hl
     ax.set_xticks(range(len(SCENARIOS))); ax.set_xticklabels([t for _, t in SCENARIOS])
     ax.set_ylabel(ylabel); ax.set_title(title, fontsize=10); ax.grid(axis="y", alpha=0.3); ax.set_axisbelow(True)
     if hline is not None:
-        ax.axhline(hline, color="red", linestyle="--", linewidth=1, label="realtime (RTF = 1)")
+        ax.axhline(hline, color="red", linestyle="--", linewidth=1, label="real time (RTF = 1)")
     ax.legend(fontsize=7, loc="upper left")
     ax.set_ylim(0, ax.get_ylim()[1] * 1.18)
 
@@ -114,19 +114,19 @@ def main() -> int:
     rows = arm_rows(runs)
     args.out.mkdir(parents=True, exist_ok=True)
     proto = runs[0][1]["report"].get("protocol", {})
-    foot = (f"{args.steps} Euler step, seed 42, 2 thread pada 2 core fisik, 1 warm-up + {runs[0][1]['report'].get('repeats', proto.get('repeats', '?'))} repeat per backend/skenario, "
-            "Python/C interleaved, noise awal identik, idle host ≥90% sebelum setiap skenario. Whisker = min–max, titik = repeat.")
+    foot = (f"{args.steps} Euler steps, seed 42, 2 threads on 2 physical cores, 1 warm-up + {runs[0][1]['report'].get('repeats', proto.get('repeats', '?'))} timed repeats per backend/scenario, "
+            "Python and C interleaved, identical initial noise,\nhost ≥90% idle before every scenario. Whiskers = min–max, dots = individual repeats.")
 
     fig, ax = plt.subplots(figsize=(10, 5))
-    grouped(ax, rows, "p50", "latency warm p50 (s) — lebih rendah lebih baik", f"{args.title}: latency end-to-end", annotate_speedup=True)
-    fig.text(0.01, 0.005, foot, fontsize=6.5, ha="left"); fig.tight_layout(rect=(0, 0.04, 1, 1)); fig.savefig(args.out / "latency.png", dpi=150); plt.close(fig)
+    grouped(ax, rows, "p50", "warm end-to-end latency, p50 (s) — lower is better", f"{args.title}: end-to-end latency", annotate_speedup=True)
+    fig.text(0.01, 0.005, foot, fontsize=6.5, ha="left"); fig.tight_layout(rect=(0, 0.06, 1, 1)); fig.savefig(args.out / "latency.png", dpi=150); plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(10, 4.5))
-    grouped(ax, rows, "rtf", "RTF p50 (waktu / durasi audio) — lebih rendah lebih baik", "Real-time factor", whisk=False, hline=1.0, unit="x")
+    grouped(ax, rows, "rtf", "RTF, p50 (latency / audio duration) — lower is better", "Real-time factor", whisk=False, hline=1.0, unit="x")
     fig.tight_layout(); fig.savefig(args.out / "rtf.png", dpi=150); plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(10, 4.5))
-    grouped(ax, rows, "rss_mib", "peak RSS (MiB) — lebih rendah lebih baik", "Memori puncak proses (getrusage ru_maxrss, termasuk init dan warm-up)", whisk=False, unit="MiB")
+    grouped(ax, rows, "rss_mib", "peak RSS (MiB) — lower is better", "Peak process memory (getrusage ru_maxrss, includes init and warm-up)", whisk=False, unit="MiB")
     fig.tight_layout(); fig.savefig(args.out / "ram.png", dpi=150); plt.close(fig)
 
     # stages
@@ -155,7 +155,7 @@ def main() -> int:
     ax.set_xticks(sub_ticks); ax.set_xticklabels(sub_labels, fontsize=6, rotation=0)
     for j, (_, title_) in enumerate(SCENARIOS):
         ax.text(j, -0.16 * ax.get_ylim()[1], title_, ha="center", va="top", fontsize=10, fontweight="bold")
-    ax.set_ylabel("detik (run p50) — lebih rendah lebih baik"); ax.set_title("Dekomposisi stage: encode (front-end) / sample (DiT) / decode (codec)", fontsize=10)
+    ax.set_ylabel("seconds (p50 run) — lower is better"); ax.set_title("Stage breakdown: encode (front-end) / sample (DiT) / decode (codec)", fontsize=10)
     ax.grid(axis="y", alpha=0.3); ax.set_axisbelow(True); ax.legend(fontsize=8); ax.set_ylim(0, ax.get_ylim()[1] * 1.1)
     fig.tight_layout(rect=(0, 0.06, 1, 1)); fig.savefig(args.out / "stages.png", dpi=150); plt.close(fig)
 
@@ -172,12 +172,12 @@ def main() -> int:
             ticks.append(tick); labels_.append(f"{title}\n{arm}"); tick += 1
         tick += 0.6
     ax.set_xticks(ticks); ax.set_xticklabels(labels_, fontsize=5.5, rotation=90)
-    ax.set_ylabel("latency per repeat (s)"); ax.set_title("Setiap repeat terukur (garis = p50): konsistensi antar-run", fontsize=10)
+    ax.set_ylabel("latency per repeat (s)"); ax.set_title("Every timed repeat (line = p50): run-to-run consistency", fontsize=10)
     ax.grid(axis="y", alpha=0.3); ax.set_axisbelow(True)
     fig.tight_layout(); fig.savefig(args.out / "repeats.png", dpi=150); plt.close(fig)
 
     # tables
-    md = ["| Skenario | Arm | p50 s | p95 s | min–max s | CV % | Speedup vs Python | Latency cut | RTF | Peak RSS MiB | RAM cut | PCM16 max LSB | deterministik |",
+    md = ["| Scenario | Arm | p50 s | p95 s | min–max s | CV % | Speedup vs Python | Latency cut | RTF | Peak RSS MiB | RAM cut | PCM16 max LSB | deterministic |",
           "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|"]
     with open(args.out / "summary.csv", "w", newline="") as fh:
         w = csv.writer(fh); w.writerow(["scenario", "arm", "p50_s", "p95_s", "min_s", "max_s", "cv_pct", "speedup_vs_python", "rtf", "peak_rss_mib", "pcm16_max_lsb", "deterministic", "samples"])

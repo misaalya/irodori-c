@@ -47,7 +47,7 @@ def quality_tables(root: Path, out: Path) -> list[str]:
             xs = [j + i * width for j in range(len(modes))]
             axes[0].bar(xs, [per_mode.get(m, (0, 0, 0))[0] for m in modes], width, label=cfg)
             axes[1].bar(xs, [per_mode.get(m, (0, 0, 0))[1] for m in modes], width, label=cfg)
-        for ax, title in zip(axes, ["Log-mel spectral distance vs FP32 (dB, lebih rendah lebih dekat)", "STOI vs FP32 (lebih tinggi lebih dekat)"]):
+        for ax, title in zip(axes, ["Log-mel spectral distance vs FP32 (dB, lower = closer)", "STOI vs FP32 (higher = closer)"]):
             ax.set_xticks([j + width * (len(series) - 1) / 2 for j in range(len(modes))])
             ax.set_xticklabels(modes)
             ax.set_title(title, fontsize=9)
@@ -55,7 +55,7 @@ def quality_tables(root: Path, out: Path) -> list[str]:
         axes[1].set_ylim(0, 1.05)
         axes[0].set_ylim(0, axes[0].get_ylim()[1] * 1.35)
         axes[0].legend(fontsize=7, ncol=2, loc="upper left")
-        fig.suptitle("Jarak audio ke FP32, 8-step, 6 teks per mode (fp32-avx512 = batas rounding)", fontsize=10)
+        fig.suptitle("Audio distance to FP32, 8 steps, 6 texts per mode", fontsize=10)
         fig.tight_layout()
         fig.savefig(out / "quality-distance.png", dpi=130)
         lines.append(f"![quality]({(out / 'quality-distance.png').name})\n")
@@ -82,8 +82,8 @@ def asr_table(root: Path, out: Path) -> list[str]:
     fig, ax = plt.subplots(figsize=(8, 3.5))
     ax.bar(range(len(groups)), [means[g] for g in groups], color=["#4c72b0" if "fp32" in g else "#dd8452" for g in groups])
     ax.set_xticks(range(len(groups))); ax.set_xticklabels(groups, rotation=30, ha="right", fontsize=8)
-    ax.set_ylabel("CER rata-rata (lebih rendah lebih baik)")
-    ax.set_title("ASR CER terhadap teks target (kotoba-whisper-v2.0)", fontsize=10)
+    ax.set_ylabel("mean CER (lower is better)")
+    ax.set_title("ASR CER against the target text (kotoba-whisper-v2.0)", fontsize=10)
     ax.grid(axis="y", alpha=0.3)
     fig.tight_layout(); fig.savefig(out / "asr-cer.png", dpi=130)
     lines.append(f"\n![asr]({(out / 'asr-cer.png').name})\n")
@@ -123,7 +123,7 @@ def speed_table(root: Path, out: Path) -> list[str]:
                     groups[(mode, step)][0].append(v["baseline"]["run"]["elapsed_seconds"])
                     groups[(mode, step)][1].append(v["candidate"]["run"]["elapsed_seconds"])
             min_idle = min(r["idle_run"]["idle_fraction"] for r in rows)
-            status = f"formal, idle >= {min_idle:.0%}" if min_idle >= 0.9 else f"diagnostik, idle min {min_idle:.0%}"
+            status = f"formal, idle >= {min_idle:.0%}" if min_idle >= 0.9 else f"diagnostic, min idle {min_idle:.0%}"
             names = [f"{m}\ns{st}" for (m, st) in groups]
             fig, ax = plt.subplots(figsize=(max(6, 1.1 * len(names)), 4))
             xs = range(len(names)); w = 0.38
@@ -135,7 +135,7 @@ def speed_table(root: Path, out: Path) -> list[str]:
                 for x, m in zip(xs, med):
                     ax.text(x + (i - 0.5) * w, m, f"{m:.1f}", ha="center", va="bottom", fontsize=7)
             ax.set_xticks(list(xs)); ax.set_xticklabels(names, fontsize=8)
-            ax.set_ylabel("warm E2E p50 s (lebih rendah lebih baik)"); ax.legend(fontsize=8); ax.grid(axis="y", alpha=0.3)
+            ax.set_ylabel("warm end-to-end p50 s (lower is better)"); ax.legend(fontsize=8); ax.grid(axis="y", alpha=0.3)
             ax.set_title(f"{summary.parent.name}: {len(next(iter(groups.values()))[0])} pair, {status}", fontsize=9)
             fig.tight_layout(); png = out / f"{summary.parent.name}.png"; fig.savefig(png, dpi=130)
             lines.append(f"\n![speed]({png.name})\n")
