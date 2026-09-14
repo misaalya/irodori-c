@@ -187,6 +187,18 @@ from integer paths, not FP32 kernels. Full reports, figures and raw samples:
 If you need output that reproduces the PyTorch reference exactly, use the
 FP32 path.
 
+## Demo web UI
+
+[`demo/`](https://github.com/misaalya/irodori-c-demo) (git submodule) is a
+minimal browser front-end that runs the engine binary — text, caption,
+reference WAV, steps, seed and fp32/int8 selection, with the engine's stage
+timings shown next to the audio. Python standard library only:
+
+```sh
+git submodule update --init
+python3 demo/server.py --binary ./irodori-onemkl --weights ./weights   # http://127.0.0.1:8080
+```
+
 ## Engine API
 
 ```c
