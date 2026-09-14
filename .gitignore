@@ -26,23 +26,8 @@
 /.profile-*
 /downloads/
 
-# Evaluation artifacts: keep reports, tables, figures, JSON summaries and
-# source diffs; drop audio, raw tensors, binaries, logs and archives.
-/artifacts/**/*.wav
-/artifacts/**/*.f32
-/artifacts/**/*.bin
-/artifacts/**/*.tar.gz
-/artifacts/**/*.err
-/artifacts/**/*.stderr
-/artifacts/**/*.bak
-/artifacts/**/*.sha256
-/artifacts/**/dump/
-/artifacts/**/baseline/*
-!/artifacts/**/baseline/*.txt
-!/artifacts/**/baseline/*.diff
-/artifacts/**/bench-codec-*
-/artifacts/**/test-mkl-local
-/artifacts/**/onemkl-runtime/
+# Evaluation artifacts (benchmark runs, reports, audio) are kept local
+/artifacts/
 
 # Audio written by tests and examples
 *.wav
