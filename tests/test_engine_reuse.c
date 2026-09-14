@@ -31,6 +31,14 @@ static int files_equal(const char *left_path, const char *right_path) {
     return equal;
 }
 
+typedef struct { int count; int bad; } Observer;
+static void observe(void *user, const char *stage) {
+    Observer *o = user;
+    const char *expected[] = {"conditions", "sampling", "decode", "cleanup"};
+    if (strcmp(stage, expected[o->count % 4])) o->bad = 1;
+    o->count++;
+}
+
 int main(int argc, char **argv) {
     if (argc != 5) {
         fprintf(stderr, "usage: %s MODEL TOKENIZER DECODER NOISE\n", argv[0]);
@@ -48,11 +56,14 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    Observer observer = {0};
     IroGenerateConfig request = {
         .text = "こんにちは、色とりどりの世界へようこそ。",
         .noise_path = argv[4],
         .seed = 42,
         .steps = 1,
+        .stage_observer = observe,
+        .stage_observer_user = &observer,
     };
     IroGenerateStats first = {0}, second = {0};
     request.output_path = "/tmp/irodori-engine-reuse-a.wav";
@@ -66,7 +77,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "FAIL reusable engine determinism\n");
         return 1;
     }
-    if (first.tokens != second.tokens ||
+    if (observer.bad || observer.count != 8 || first.tokens != second.tokens ||
         first.latent_frames != second.latent_frames ||
         first.output_samples != second.output_samples) {
         fprintf(stderr, "FAIL reusable engine stats mismatch\n");

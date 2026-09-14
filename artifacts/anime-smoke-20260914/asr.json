@@ -1,0 +1,34 @@
+[
+  {
+    "wav": "artifacts/anime-smoke-20260914/anime-text-fp32.wav",
+    "text": "こんにちは、色とりどりの世界へようこそ。",
+    "label": "text",
+    "group": "fp32",
+    "hypothesis": "こんにちは色とりどりの世界へようこそ",
+    "cer": 0.0
+  },
+  {
+    "wav": "artifacts/anime-smoke-20260914/anime-text-int8.wav",
+    "text": "こんにちは、色とりどりの世界へようこそ。",
+    "label": "text",
+    "group": "int8",
+    "hypothesis": "こんにちは色とりどりの世界へようこそ",
+    "cer": 0.0
+  },
+  {
+    "wav": "artifacts/anime-smoke-20260914/anime-clone-fp32.wav",
+    "text": "こんにちは、色とりどりの世界へようこそ。",
+    "label": "clone",
+    "group": "fp32",
+    "hypothesis": "こんにちは色とりどりの世界へようこそ",
+    "cer": 0.0
+  },
+  {
+    "wav": "artifacts/anime-smoke-20260914/anime-clone-int8.wav",
+    "text": "こんにちは、色とりどりの世界へようこそ。",
+    "label": "clone",
+    "group": "int8",
+    "hypothesis": "こんにちは色とりどりの世界へようこそ",
+    "cer": 0.0
+  }
+]

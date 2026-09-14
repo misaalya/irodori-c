@@ -46,6 +46,11 @@ def main() -> int:
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--text", default=DEFAULT_TEXT)
     parser.add_argument("--caption", default=None)
+    parser.add_argument(
+        "--checkpoint",
+        type=Path,
+        help="local model checkpoint; defaults to the upstream Hugging Face checkpoint",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--steps", type=int, default=8)
     parser.add_argument("--threads", type=int, default=2)
@@ -55,11 +60,18 @@ def main() -> int:
     reference_path = args.ref.resolve() if args.ref is not None else None
     if reference_path is not None and not reference_path.is_file():
         parser.error(f"reference WAV does not exist: {reference_path}")
+    checkpoint_path = args.checkpoint.resolve() if args.checkpoint is not None else None
+    if checkpoint_path is not None and not checkpoint_path.is_file():
+        parser.error(f"checkpoint does not exist: {checkpoint_path}")
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
     torch.set_num_threads(args.threads)
     torch.set_num_interop_threads(1)
-    checkpoint = download_hf_checkpoint("Aratako/Irodori-TTS-v4.1-Small")
+    checkpoint = (
+        str(checkpoint_path)
+        if checkpoint_path is not None
+        else download_hf_checkpoint("Aratako/Irodori-TTS-v4.1-Small")
+    )
     runtime, _ = get_cached_runtime(
         RuntimeKey(
             checkpoint=checkpoint,
@@ -184,9 +196,19 @@ def main() -> int:
         shapes[f"velocity_step{step:03d}"] = _write_f32(
             args.out_dir / f"velocity_step{step:03d}.f32", velocity
         )
+    if reference_path is not None and args.caption:
+        mode = "clone+caption"
+    elif reference_path is not None:
+        mode = "clone"
+    elif args.caption:
+        mode = "caption-only"
+    else:
+        mode = "text-only"
     metadata = {
+        "mode": mode,
         "text": args.text,
         "caption": args.caption,
+        "checkpoint": str(checkpoint),
         "reference": None if reference_path is None else str(reference_path),
         "seed": args.seed,
         "steps": args.steps,

@@ -1,0 +1,20 @@
+[
+ {
+  "wav": "artifacts/pyc-3scenarios-20260914/armA-clone/steps-8/clone/python-run-5.wav",
+  "text": "こんにちは、色とりどりの世界へようこそ。",
+  "label": "clone",
+  "group": "python-fp32"
+ },
+ {
+  "wav": "artifacts/pyc-3scenarios-20260914/armA-clone/steps-8/clone/c-run-5.wav",
+  "text": "こんにちは、色とりどりの世界へようこそ。",
+  "label": "clone",
+  "group": "c-fp32"
+ },
+ {
+  "wav": "artifacts/pyc-3scenarios-20260914/armB-clone/steps-8/clone/c-run-5.wav",
+  "text": "こんにちは、色とりどりの世界へようこそ。",
+  "label": "clone",
+  "group": "c-int8"
+ }
+]

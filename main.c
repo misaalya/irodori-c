@@ -27,6 +27,7 @@ static void usage(void) {
         "  irodori --text <text> [--model PATH] [--tokenizer PATH]\n"
         "          [--decoder PATH] [--ref WAV --encoder PATH] [--caption TEXT]\n"
         "          [--seed N] [--steps N] [--out PATH] [--dump-dir PATH]\n"
+        "          [--dit-precision fp32|int8] [--codec-precision fp32|int8]\n"
         "                                                       text -> WAV\n"
         "  irodori --list-tensors <model.safetensors>         inventory tensor\n"
         "  irodori --info <model.safetensors>                  metadata checkpoint\n"
@@ -2053,6 +2054,13 @@ cleanup_pipeline:
     return result;
 }
 
+static int parse_dit_precision(const char *value, int *precision) {
+    if (!value || !precision) return -1;
+    if (!strcmp(value, "fp32")) { *precision = IRO_DIT_PRECISION_FP32; return 0; }
+    if (!strcmp(value, "int8")) { *precision = IRO_DIT_PRECISION_INT8; return 0; }
+    return -1;
+}
+
 static int cmd_generate_text(int argc, char **argv) {
     if (argc < 3) return 1;
     const char *model = getenv("IRO_MODEL");
@@ -2069,6 +2077,18 @@ static int cmd_generate_text(int argc, char **argv) {
         .seed = 42,
         .steps = 40,
     };
+    int dit_precision = IRO_DIT_PRECISION_FP32;
+    int codec_precision = IRO_DIT_PRECISION_FP32;
+    const char *precision_env = getenv("IRO_DIT_PRECISION");
+    if (precision_env && parse_dit_precision(precision_env, &dit_precision) != 0) {
+        fprintf(stderr, "IRO_DIT_PRECISION harus fp32 atau int8\n");
+        return 1;
+    }
+    const char *codec_env = getenv("IRO_CODEC_PRECISION");
+    if (codec_env && parse_dit_precision(codec_env, &codec_precision) != 0) {
+        fprintf(stderr, "IRO_CODEC_PRECISION harus fp32 atau int8\n");
+        return 1;
+    }
     for (int i = 3; i < argc; i += 2) {
         if (i + 1 >= argc) {
             fprintf(stderr, "generate: nilai tidak ada untuk %s\n", argv[i]);
@@ -2076,6 +2096,18 @@ static int cmd_generate_text(int argc, char **argv) {
         }
         const char *option = argv[i], *value = argv[i + 1];
         if (!strcmp(option, "--model")) config.model_path = value;
+        else if (!strcmp(option, "--dit-precision")) {
+            if (parse_dit_precision(value, &dit_precision) != 0) {
+                fprintf(stderr, "generate: --dit-precision harus fp32 atau int8\n");
+                return 1;
+            }
+        }
+        else if (!strcmp(option, "--codec-precision")) {
+            if (parse_dit_precision(value, &codec_precision) != 0) {
+                fprintf(stderr, "generate: --codec-precision harus fp32 atau int8\n");
+                return 1;
+            }
+        }
         else if (!strcmp(option, "--tokenizer")) config.tokenizer_path = value;
         else if (!strcmp(option, "--decoder")) config.decoder_path = value;
         else if (!strcmp(option, "--encoder")) config.encoder_path = value;
@@ -2105,8 +2137,31 @@ static int cmd_generate_text(int argc, char **argv) {
             return 1;
         }
     }
+    IroEngineConfig engine_config = {
+        .model_path = config.model_path,
+        .tokenizer_path = config.tokenizer_path,
+        .decoder_path = config.decoder_path,
+        .encoder_path = config.reference_path ? config.encoder_path : NULL,
+        .dit_precision = dit_precision,
+        .codec_precision = codec_precision,
+    };
+    if ((dit_precision == IRO_DIT_PRECISION_INT8 ||
+         codec_precision == IRO_DIT_PRECISION_INT8) && !iro_int8_fast_available())
+        fprintf(stderr, "peringatan: backend ini tidak punya GEMM int8 "
+                        "tervektorisasi; jalur int8 memakai referensi skalar "
+                        "yang lambat\n");
+    IroEngine engine = {0};
     IroGenerateStats stats = {0};
-    if (iro_generate_text(&config, &stats) != 0) {
+    struct timespec init_begin, init_end;
+    clock_gettime(CLOCK_MONOTONIC, &init_begin);
+    if (iro_engine_init(&engine, &engine_config) != 0) {
+        fprintf(stderr, "generate: inisialisasi engine gagal\n");
+        return 1;
+    }
+    clock_gettime(CLOCK_MONOTONIC, &init_end);
+    int generate_result = iro_engine_generate(&engine, &config, &stats);
+    iro_engine_free(&engine);
+    if (generate_result != 0) {
         fprintf(stderr, "generate text-to-audio gagal\n");
         return 1;
     }
@@ -2125,6 +2180,22 @@ static int cmd_generate_text(int argc, char **argv) {
            (unsigned long long)config.seed, config.steps);
     printf("mmap front-end dilepas sebelum DiT: %.1f MiB\n",
            (double)stats.evicted_model_bytes / (1024.0 * 1024.0));
+    double init_seconds =
+        (double)(init_end.tv_sec - init_begin.tv_sec) +
+        1e-9 * (double)(init_end.tv_nsec - init_begin.tv_nsec);
+    printf("DiT precision %s | init engine %.3f s%s\n",
+           stats.dit_precision == IRO_DIT_PRECISION_INT8 ? "int8 (W8A8)" : "fp32",
+           init_seconds,
+           stats.dit_precision == IRO_DIT_PRECISION_INT8 ? " termasuk kuantisasi" : "");
+    if (stats.dit_precision == IRO_DIT_PRECISION_INT8)
+        printf("payload DiT int8: %.1f MiB\n",
+               (double)stats.dit_int8_bytes / (1024.0 * 1024.0));
+    printf("codec precision %s%s\n",
+           stats.codec_precision == IRO_DIT_PRECISION_INT8 ? "int8 (W8A8)" : "fp32",
+           stats.codec_precision == IRO_DIT_PRECISION_INT8 ? "" : "");
+    if (stats.codec_precision == IRO_DIT_PRECISION_INT8)
+        printf("payload codec int8: %.1f MiB\n",
+               (double)stats.codec_int8_bytes / (1024.0 * 1024.0));
     return 0;
 }
 

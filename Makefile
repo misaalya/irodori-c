@@ -1,4 +1,5 @@
 # Irodori C Engine — scalar oracle + optional high-performance CBLAS build
+.DEFAULT_GOAL := all
 CC      ?= cc
 CFLAGS  ?= -O2 -Wall -Wextra -std=c11
 LDFLAGS ?= -lm
@@ -27,6 +28,10 @@ BLAS_LIBS ?= -lblas
 endif
 endif
 
+# Snake activations are sinf-bound; the 16-wide libmvec variant is ~25% faster
+# than the default 256-bit preference on AVX-512 hosts.
+dacvae_blas.o: FAST_CFLAGS += -mprefer-vector-width=512
+
 SRC_COMMON := safetensors.c tokenizer.c normalize.c backbone.c condition.c duration.c dit.c sampler.c dacvae.c speaker.c audio.c generate.c vendor/utf8proc/utf8proc.c
 OBJ_COMMON := main.o $(SRC_COMMON:.c=.o)
 OBJ_BLAS_COMMON := main_blas.o $(SRC_COMMON:.c=_blas.o)
@@ -46,6 +51,9 @@ CLONE_CAPTION_GOLDEN ?= golden/kana_clone_caption_seed42_steps8
 CAPTION_GOLDEN ?= golden/caption_seed42_steps8
 PYTHON ?= ../Irodori-TTS/.venv/bin/python
 REF ?=
+REF2 ?=
+QUALITY_WORK_DIR ?=
+QUALITY_MAX_CASES ?=
 
 # Optional development backend: PyTorch CPU wheels bundle oneMKL inside
 # libtorch_cpu.so.  Keeping it as a separate target avoids making the normal
@@ -55,6 +63,53 @@ TORCH_LIBDIR ?= $(firstword $(wildcard ../Irodori-TTS/.venv/lib/python*/site-pac
 TORCH_CPU_LIB ?= $(TORCH_LIBDIR)/libtorch_cpu.so
 TORCH_GOMP_LIB ?= $(TORCH_LIBDIR)/libgomp.so.1
 TORCH_MKL_LIBS = $(TORCH_CPU_LIB) $(TORCH_GOMP_LIB) -Wl,-rpath,$(abspath $(TORCH_LIBDIR))
+
+# Optional standalone oneMKL runtime (public CBLAS API, no libtorch).
+# MKL_ROOT contains include/mkl.h and lib/libmkl_rt.so.3 (override ONEMKL_RT
+# for distributions using a different soname). Keep the default BLAS unchanged.
+MKL_ROOT ?= /opt/intel/oneapi/mkl/latest
+ONEMKL_RT ?= $(MKL_ROOT)/lib/libmkl_rt.so.3
+ONEMKL_LIBS = $(ONEMKL_RT) -Wl,-rpath,$(abspath $(MKL_ROOT)/lib) -lpthread -ldl
+
+ops_onemkl.o: ops.c $(HDR)
+	@test -f "$(MKL_ROOT)/include/mkl.h" -a -f "$(ONEMKL_RT)" || \
+		(echo 'Standalone oneMKL headers/runtime missing; set MKL_ROOT and ONEMKL_RT'; exit 2)
+	$(CC) $(FAST_CFLAGS) $(CFLAGS_EXTRA) -I"$(MKL_ROOT)/include" \
+		-DIRO_USE_CBLAS -DIRO_USE_ONEMKL -c -o $@ $<
+
+irodori-onemkl: $(OBJ_BLAS_COMMON) ops_onemkl.o $(HDR)
+	$(CC) $(FAST_CFLAGS) -o $@ $(OBJ_BLAS_COMMON) ops_onemkl.o $(LDFLAGS) $(ONEMKL_LIBS)
+
+irodori-bench-worker-onemkl: tools/bench_c_worker.c $(SRC_COMMON:.c=_blas.o) ops_onemkl.o $(HDR)
+	$(CC) $(FAST_CFLAGS) -I. -o $@ tools/bench_c_worker.c \
+		$(SRC_COMMON:.c=_blas.o) ops_onemkl.o $(LDFLAGS) $(ONEMKL_LIBS)
+
+.PHONY: test-packed-cache bench-onemkl-packed
+test-int8-ops:
+	$(CC) -O2 -Wall -Wextra -Werror -std=c11 -I. tests/test_int8_ops.c ops.c \
+		$(LDFLAGS) -o /tmp/irodori-test-int8-ops
+	/tmp/irodori-test-int8-ops
+
+test-int8-ops-onemkl:
+	@test -f "$(MKL_ROOT)/include/mkl.h" -a -f "$(ONEMKL_RT)" || \
+		(echo 'Standalone oneMKL headers/runtime missing; set MKL_ROOT and ONEMKL_RT'; exit 2)
+	$(CC) $(FAST_CFLAGS) -Werror -I. -I"$(MKL_ROOT)/include" -DIRO_USE_CBLAS -DIRO_USE_ONEMKL \
+		tests/test_int8_ops.c ops.c $(LDFLAGS) $(ONEMKL_LIBS) -o /tmp/irodori-test-int8-ops-onemkl
+	MKL_NUM_THREADS=2 /tmp/irodori-test-int8-ops-onemkl
+
+test-packed-cache:
+	$(CC) -O2 -Wall -Wextra -Werror -std=c11 -I. -I"$(MKL_ROOT)/include" \
+		-DIRO_USE_CBLAS -DIRO_USE_ONEMKL tests/test_packed_cache.c ops.c \
+		$(LDFLAGS) $(ONEMKL_LIBS) -o /tmp/irodori-test-packed-cache
+	MKL_CBWR=AVX2 /tmp/irodori-test-packed-cache
+
+bench-onemkl-packed:
+	@test -n "$(MODEL)" || (echo 'MODEL is required'; exit 2)
+	$(CC) -O3 -Wall -Wextra -std=c11 -I. -I"$(MKL_ROOT)/include" \
+		tests/bench_onemkl_packed.c safetensors.c $(LDFLAGS) $(ONEMKL_LIBS) \
+		-o /tmp/irodori-bench-onemkl-packed
+	MKL_CBWR=AVX2 taskset -c 0,1 /tmp/irodori-bench-onemkl-packed \
+		"$(MODEL)" "$(BACKBONE_GOLDEN)/dit_b0_mlp_adaln_h.f32"
 
 all: irodori
 
@@ -117,6 +172,57 @@ test-audio: /tmp/irodori-test-audio
 
 test-model-io: /tmp/irodori-test-model-io
 	/tmp/irodori-test-model-io
+
+test-bench-harness:
+	$(PYTHON) tools/test_bench_speed_tradeoff.py
+	$(PYTHON) tools/test_bench_four_modes.py
+	$(PYTHON) tools/test_bench_profile_corpus.py
+	$(PYTHON) tools/test_quality_corpus.py
+
+quality-corpus-plan:
+	@test -n "$(REF)" || (echo "REF=/path/to/reference.wav wajib diisi"; exit 2)
+	$(PYTHON) tools/build_quality_corpus.py --plan-only --ref "primary=$(REF)" \
+		$(if $(REF2),--ref "secondary=$(REF2)",)
+
+quality-corpus: irodori-bench-worker
+	@test -n "$(MODEL)" || (echo "MODEL=/path/to/model.safetensors wajib diisi"; exit 2)
+	@test -n "$(REF)" || (echo "REF=/path/to/reference.wav wajib diisi"; exit 2)
+	@test -n "$(REF2)" || (echo "REF2=/path/to/second-reference.wav wajib diisi"; exit 2)
+	$(PYTHON) tools/build_quality_corpus.py --model "$(MODEL)" \
+		--ref "primary=$(REF)" --ref "secondary=$(REF2)" --threads 2 \
+		$(if $(QUALITY_WORK_DIR),--work-dir "$(QUALITY_WORK_DIR)",) \
+		$(if $(QUALITY_MAX_CASES),--max-cases "$(QUALITY_MAX_CASES)",)
+
+quality-corpus-mkl: irodori-bench-worker-mkl
+	@test -n "$(MODEL)" || (echo "MODEL=/path/to/model.safetensors wajib diisi"; exit 2)
+	@test -n "$(REF)" || (echo "REF=/path/to/reference.wav wajib diisi"; exit 2)
+	@test -n "$(REF2)" || (echo "REF2=/path/to/second-reference.wav wajib diisi"; exit 2)
+	$(PYTHON) tools/build_quality_corpus.py --model "$(MODEL)" \
+		--ref "primary=$(REF)" --ref "secondary=$(REF2)" --threads 2 \
+		--c-worker ./irodori-bench-worker-mkl --c-backend torch-mkl-sgemm \
+		$(if $(QUALITY_WORK_DIR),--work-dir "$(QUALITY_WORK_DIR)",) \
+		$(if $(QUALITY_MAX_CASES),--max-cases "$(QUALITY_MAX_CASES)",)
+
+quality-corpus-mkl-resume: irodori-bench-worker-mkl
+	@test -n "$(MODEL)" || (echo "MODEL=/path/to/model.safetensors wajib diisi"; exit 2)
+	@test -n "$(REF)" || (echo "REF=/path/to/reference.wav wajib diisi"; exit 2)
+	@test -n "$(REF2)" || (echo "REF2=/path/to/second-reference.wav wajib diisi"; exit 2)
+	@test -n "$(QUALITY_WORK_DIR)" || (echo "QUALITY_WORK_DIR=/path/to/existing-run wajib diisi"; exit 2)
+	$(PYTHON) tools/build_quality_corpus.py --resume --work-dir "$(QUALITY_WORK_DIR)" \
+		--model "$(MODEL)" --ref "primary=$(REF)" --ref "secondary=$(REF2)" --threads 2 \
+		--c-worker ./irodori-bench-worker-mkl --c-backend torch-mkl-sgemm \
+		$(if $(QUALITY_MAX_CASES),--max-cases "$(QUALITY_MAX_CASES)",)
+
+bench-profiler-overhead: irodori-blas
+	@test -n "$(MODEL)" || (echo "MODEL=/path/to/model.safetensors wajib diisi"; exit 2)
+	$(PYTHON) tools/bench_profiler_overhead.py --model "$(MODEL)" \
+		--threads 2 --pairs 3
+
+bench-profile-corpus: irodori-bench-worker
+	@test -n "$(MODEL)" || (echo "MODEL=/path/to/model.safetensors wajib diisi"; exit 2)
+	@test -n "$(REF)" || (echo "REF=/path/to/reference.wav wajib diisi"; exit 2)
+	$(PYTHON) tools/bench_profile_corpus.py --model "$(MODEL)" --ref "$(REF)" \
+		--threads 2 --steps 8,40
 
 /tmp/irodori-test-model-io: tests/test_model_io.c safetensors.c tokenizer.c irodori.h tokenizer.h
 	$(CC) $(CFLAGS) $(CFLAGS_EXTRA) -I. -o $@ tests/test_model_io.c safetensors.c tokenizer.c $(LDFLAGS)
@@ -225,6 +331,37 @@ test-engine-reuse-blas: irodori-blas
 	IRO_NUM_THREADS=2 /tmp/irodori-test-engine-reuse "$(MODEL)" \
 		"$(TOKENIZER_BIN)" "$(CODEC_WEIGHTS)" "$(BACKBONE_GOLDEN)/x_t_step000.f32"
 
+test-int8-engine-onemkl:
+	@test -n "$(MODEL)" || (echo "MODEL=/path/to/model.safetensors wajib diisi"; exit 2)
+	@test -f "$(MKL_ROOT)/include/mkl.h" -a -f "$(ONEMKL_RT)" || \
+		(echo 'Standalone oneMKL headers/runtime missing; set MKL_ROOT and ONEMKL_RT'; exit 2)
+	$(CC) $(FAST_CFLAGS) $(CFLAGS_EXTRA) -I. -I"$(MKL_ROOT)/include" \
+		-DIRO_USE_CBLAS -DIRO_USE_ONEMKL -o /tmp/irodori-test-int8-engine \
+		tests/test_int8_engine.c $(SRC_COMMON) ops.c $(LDFLAGS) $(ONEMKL_LIBS)
+	MKL_CBWR=AVX512_E1 IRO_NUM_THREADS=2 /tmp/irodori-test-int8-engine "$(MODEL)" \
+		"$(TOKENIZER_BIN)" "$(CODEC_WEIGHTS)" "$(BACKBONE_GOLDEN)/x_t_step000.f32"
+
+test-int8-engine-sanitize:
+	@test -n "$(MODEL)" || (echo "MODEL=/path/to/model.safetensors wajib diisi"; exit 2)
+	@test -f "$(MKL_ROOT)/include/mkl.h" -a -f "$(ONEMKL_RT)" || \
+		(echo 'Standalone oneMKL headers/runtime missing; set MKL_ROOT and ONEMKL_RT'; exit 2)
+	$(CC) -O1 -g -Wall -Wextra -std=c11 -fsanitize=address,undefined -fno-omit-frame-pointer \
+		$(CFLAGS_EXTRA) -I. -I"$(MKL_ROOT)/include" -DIRO_USE_CBLAS -DIRO_USE_ONEMKL \
+		-o /tmp/irodori-test-int8-engine-san tests/test_int8_engine.c $(SRC_COMMON) ops.c \
+		$(LDFLAGS) $(ONEMKL_LIBS)
+	ASAN_OPTIONS=detect_leaks=0 MKL_CBWR=AVX512_E1 IRO_NUM_THREADS=2 /tmp/irodori-test-int8-engine-san \
+		"$(MODEL)" "$(TOKENIZER_BIN)" "$(CODEC_WEIGHTS)" "$(BACKBONE_GOLDEN)/x_t_step000.f32"
+
+test-prepared-reference-blas: irodori-blas
+	@test -n "$(MODEL)" || (echo "MODEL=/path/to/model.safetensors wajib diisi"; exit 2)
+	@test -n "$(REF)" || (echo "REF=/path/to/reference.wav wajib diisi"; exit 2)
+	$(CC) $(FAST_CFLAGS) $(CFLAGS_EXTRA) $(BLAS_CFLAGS) -I. \
+		-o /tmp/irodori-test-prepared-reference tests/test_prepared_reference.c \
+		$(SRC_COMMON) ops.c $(LDFLAGS) $(BLAS_LIBS) -DIRO_USE_CBLAS
+	IRO_NUM_THREADS=2 /tmp/irodori-test-prepared-reference "$(MODEL)" \
+		"$(TOKENIZER_BIN)" "$(CODEC_WEIGHTS)" "$(ENCODER_WEIGHTS)" "$(REF)" \
+		"$(CLONE_GOLDEN)/noise.f32" 5
+
 bench-linear: irodori irodori-blas
 	./irodori --bench-linear
 	./irodori-blas --bench-linear
@@ -264,8 +401,9 @@ bench-four-modes: irodori-blas
 bench-four-modes-mkl: irodori-mkl irodori-bench-worker-mkl
 	@test -n "$(MODEL)" || (echo "MODEL=/path/to/model.safetensors wajib diisi"; exit 2)
 	@test -n "$(REF)" || (echo "REF=/path/to/reference.wav wajib diisi"; exit 2)
-	MKL_CBWR=AVX2 $(PYTHON) tools/bench_four_modes.py --model "$(MODEL)" --ref "$(REF)" \
+	$(PYTHON) tools/bench_four_modes.py --model "$(MODEL)" --ref "$(REF)" \
 		--binary ./irodori-mkl --c-worker ./irodori-bench-worker-mkl \
+		--c-backend torch-mkl-sgemm \
 		--threads 2 --steps 8,40 --repeats 5
 
 irodori-bench-worker: tools/bench_c_worker.c $(SRC_COMMON:.c=_blas.o) ops_blas.o $(HDR)
@@ -322,10 +460,75 @@ bench-resample: /tmp/irodori-bench-resample
 /tmp/irodori-bench-resample: tests/bench_resample.c audio.c audio.h
 	$(CC) $(FAST_CFLAGS) -I. -o $@ tests/bench_resample.c audio.c $(LDFLAGS)
 
+bench-fused-w1-w3: /tmp/irodori-bench-fused-w1-w3
+	@test -n "$(MODEL)" || (echo "MODEL=/path/to/model.safetensors wajib diisi"; exit 2)
+	/tmp/irodori-bench-fused-w1-w3 "$(MODEL)" \
+		golden/seed42_steps8/dit_b0_mlp_adaln_h.f32 5
+
+/tmp/irodori-bench-fused-w1-w3: tests/bench_fused_w1_w3.c safetensors.c ops.c irodori.h ops.h
+	$(CC) $(FAST_CFLAGS) $(CFLAGS_EXTRA) $(BLAS_CFLAGS) -DIRO_USE_CBLAS -I. \
+		-o $@ tests/bench_fused_w1_w3.c safetensors.c ops.c \
+		$(LDFLAGS) $(BLAS_LIBS)
+
+bench-fused-w1-w3-mkl: /tmp/irodori-bench-fused-w1-w3-mkl
+	@test -n "$(MODEL)" || (echo "MODEL=/path/to/model.safetensors wajib diisi"; exit 2)
+	IRO_NUM_THREADS=2 MKL_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_CBWR=AVX2 \
+		/tmp/irodori-bench-fused-w1-w3-mkl "$(MODEL)" \
+		golden/seed42_steps8/dit_b0_mlp_adaln_h.f32 5
+
+/tmp/irodori-bench-fused-w1-w3-mkl: tests/bench_fused_w1_w3.c safetensors.c ops.c irodori.h ops.h Makefile
+	@test -f "$(TORCH_CPU_LIB)" -a -f "$(TORCH_GOMP_LIB)" || \
+		(echo "PyTorch CPU wheel dengan bundled MKL tidak ditemukan"; exit 2)
+	$(CC) $(FAST_CFLAGS) $(CFLAGS_EXTRA) -DIRO_USE_CBLAS -DIRO_USE_TORCH_MKL -I. \
+		-o $@ tests/bench_fused_w1_w3.c safetensors.c ops.c \
+		$(LDFLAGS) $(TORCH_MKL_LIBS)
+
+bench-fused-qkvg: /tmp/irodori-bench-fused-qkvg
+	@test -n "$(MODEL)" || (echo "MODEL=/path/to/model.safetensors wajib diisi"; exit 2)
+	/tmp/irodori-bench-fused-qkvg "$(MODEL)" \
+		golden/seed42_steps8/dit_b0_attn_adaln_h.f32 5
+
+/tmp/irodori-bench-fused-qkvg: tests/bench_fused_qkvg.c safetensors.c ops.c irodori.h ops.h
+	$(CC) $(FAST_CFLAGS) $(CFLAGS_EXTRA) $(BLAS_CFLAGS) -DIRO_USE_CBLAS -I. \
+		-o $@ tests/bench_fused_qkvg.c safetensors.c ops.c \
+		$(LDFLAGS) $(BLAS_LIBS)
+
+bench-fused-qkvg-mkl: /tmp/irodori-bench-fused-qkvg-mkl
+	@test -n "$(MODEL)" || (echo "MODEL=/path/to/model.safetensors wajib diisi"; exit 2)
+	IRO_NUM_THREADS=2 MKL_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_CBWR=AVX2 \
+		/tmp/irodori-bench-fused-qkvg-mkl "$(MODEL)" \
+		golden/seed42_steps8/dit_b0_attn_adaln_h.f32 5
+
+/tmp/irodori-bench-fused-qkvg-mkl: tests/bench_fused_qkvg.c safetensors.c ops.c irodori.h ops.h Makefile
+	@test -f "$(TORCH_CPU_LIB)" -a -f "$(TORCH_GOMP_LIB)" || \
+		(echo "PyTorch CPU wheel dengan bundled MKL tidak ditemukan"; exit 2)
+	$(CC) $(FAST_CFLAGS) $(CFLAGS_EXTRA) -DIRO_USE_CBLAS -DIRO_USE_TORCH_MKL -I. \
+		-o $@ tests/bench_fused_qkvg.c safetensors.c ops.c \
+		$(LDFLAGS) $(TORCH_MKL_LIBS)
+
+bench-codec-conv7: /tmp/irodori-bench-codec-conv7
+	/tmp/irodori-bench-codec-conv7 "$(CODEC_WEIGHTS)" golden/seed42_steps8 3
+
+/tmp/irodori-bench-codec-conv7: tests/bench_codec_conv7.c dacvae.c safetensors.c ops.c dacvae.h irodori.h ops.h
+	$(CC) $(FAST_CFLAGS) $(CFLAGS_EXTRA) $(BLAS_CFLAGS) -DIRO_USE_CBLAS -I. \
+		-o $@ tests/bench_codec_conv7.c dacvae.c safetensors.c ops.c \
+		$(LDFLAGS) $(BLAS_LIBS)
+
+bench-codec-conv7-mkl: /tmp/irodori-bench-codec-conv7-mkl
+	IRO_NUM_THREADS=2 MKL_NUM_THREADS=2 OMP_NUM_THREADS=2 MKL_CBWR=AVX2 \
+		/tmp/irodori-bench-codec-conv7-mkl "$(CODEC_WEIGHTS)" golden/seed42_steps8 3
+
+/tmp/irodori-bench-codec-conv7-mkl: tests/bench_codec_conv7.c dacvae.c safetensors.c ops.c dacvae.h irodori.h ops.h Makefile
+	@test -f "$(TORCH_CPU_LIB)" -a -f "$(TORCH_GOMP_LIB)" || \
+		(echo "PyTorch CPU wheel dengan bundled MKL tidak ditemukan"; exit 2)
+	$(CC) $(FAST_CFLAGS) $(CFLAGS_EXTRA) -DIRO_USE_CBLAS -DIRO_USE_TORCH_MKL -I. \
+		-o $@ tests/bench_codec_conv7.c dacvae.c safetensors.c ops.c \
+		$(LDFLAGS) $(TORCH_MKL_LIBS)
+
 clean:
 	rm -f $(OBJ_COMMON) $(OBJ_BLAS_COMMON) ops.o ops_blas.o ops_mkl.o \
 		irodori irodori-blas irodori-mkl irodori-mkl.bin \
 		irodori-bench-worker irodori-bench-worker-mkl \
 		irodori-bench-worker-mkl.bin
 
-.PHONY: all blas mkl clean test test-tokenizer test-tokenizer-boundaries test-audio test-model-io audit audit-warnings audit-sanitize audit-static test-backbone test-projector test-duration test-dit-prepare test-dit-adaln test-dit-attention test-dit-mlp test-dit-attention-blas test-dit-mlp-blas test-dit-forward-blas test-euler-blas test-euler-speaker-blas test-codec-blas test-encoder-blas test-speaker-blas test-wav test-pipeline-blas test-generate-blas test-engine-reuse-blas test-caption-parity-blas test-clone-parity-blas test-clone-caption-parity-blas golden-caption bench-linear bench-generate-python bench-clone-python bench-four-modes bench-four-modes-mkl bench-resample
+.PHONY: all blas mkl clean test test-tokenizer test-tokenizer-boundaries test-audio test-model-io test-bench-harness quality-corpus-plan quality-corpus quality-corpus-mkl quality-corpus-mkl-resume bench-profiler-overhead bench-profile-corpus audit audit-warnings audit-sanitize audit-static test-backbone test-projector test-duration test-dit-prepare test-dit-adaln test-dit-attention test-dit-mlp test-dit-attention-blas test-dit-mlp-blas test-dit-forward-blas test-euler-blas test-euler-speaker-blas test-codec-blas test-encoder-blas test-speaker-blas test-wav test-pipeline-blas test-generate-blas test-engine-reuse-blas test-int8-ops test-int8-ops-onemkl test-int8-engine-onemkl test-int8-engine-sanitize test-prepared-reference-blas test-caption-parity-blas test-clone-parity-blas test-clone-caption-parity-blas golden-caption bench-linear bench-generate-python bench-clone-python bench-four-modes bench-four-modes-mkl bench-resample bench-fused-w1-w3 bench-fused-w1-w3-mkl bench-fused-qkvg bench-fused-qkvg-mkl bench-codec-conv7 bench-codec-conv7-mkl

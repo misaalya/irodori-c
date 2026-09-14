@@ -3,8 +3,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "sampler.h"
+#include "ops.h"
 
 enum {
     TEXT_DIM = 512,
@@ -59,6 +61,12 @@ static int checked_mul(size_t left, size_t right, size_t *out) {
     if (!out || (right != 0 && left > SIZE_MAX / right)) return -1;
     *out = left * right;
     return 0;
+}
+
+static double sampler_profile_now(void) {
+    struct timespec ts;
+    timespec_get(&ts, TIME_UTC);
+    return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
 }
 
 static void workspace_impl_free(IroEulerWorkspaceImpl *workspace) {
@@ -130,6 +138,10 @@ static int sample_euler(const IroDiT *dit,
         valid_text + speaker_tokens > INT32_MAX - caption_tokens)
         return -1;
     int context_tokens = valid_text + speaker_tokens + caption_tokens;
+    int dit_profile = iro_dit_profile_enabled();
+    int gemm_profile = iro_gemm_profile_enabled();
+    if (dit_profile) iro_dit_profile_reset();
+    if (gemm_profile) iro_gemm_profile_reset();
     size_t compact_text_n, context_one_n, cache_n, latent_one_n;
     size_t latent_batch_n, projected_one_n, projected_n, cond_n, mask_n;
     if (checked_mul((size_t)valid_text, TEXT_DIM, &compact_text_n) != 0 ||
@@ -143,6 +155,7 @@ static int sample_euler(const IroDiT *dit,
         checked_mul((size_t)max_batch, (size_t)context_tokens, &mask_n) != 0)
         return -1;
 
+    double t_alloc = dit_profile ? sampler_profile_now() : 0.0;
     IroEulerWorkspaceImpl *ws = workspace_get(workspace);
     if (!ws ||
         reserve_f32(&ws->compact_text, &ws->compact_text_capacity, compact_text_n) != 0 ||
@@ -153,8 +166,15 @@ static int sample_euler(const IroDiT *dit,
         reserve_f32(&ws->x_batch, &ws->x_batch_capacity, latent_batch_n) != 0 ||
         reserve_f32(&ws->projected, &ws->projected_capacity, projected_n) != 0 ||
         reserve_f32(&ws->cond, &ws->cond_capacity, cond_n) != 0 ||
-        reserve_f32(&ws->velocity, &ws->velocity_capacity, latent_batch_n) != 0)
-        return -1;
+        reserve_f32(&ws->velocity, &ws->velocity_capacity, latent_batch_n) != 0) {
+        if (dit_profile)
+            iro_dit_profile_add(-1, max_batch, IRO_DIT_PROFILE_ALLOCATION,
+                                sampler_profile_now() - t_alloc);
+        goto fail;
+    }
+    if (dit_profile)
+        iro_dit_profile_add(-1, max_batch, IRO_DIT_PROFILE_ALLOCATION,
+                            sampler_profile_now() - t_alloc);
 
     float *compact_text = ws->compact_text;
     float *cache_k = ws->cache_k;
@@ -166,6 +186,7 @@ static int sample_euler(const IroDiT *dit,
     float *cond = ws->cond;
     float *velocity = ws->velocity;
 
+    double t_context = dit_profile ? sampler_profile_now() : 0.0;
     int compact_index = 0;
     for (int i = 0; i < text_tokens; i++) {
         if (!text_mask[i]) continue;
@@ -186,10 +207,14 @@ static int sample_euler(const IroDiT *dit,
         memset(mask_cfg + (size_t)caption_uncond_row * context_tokens +
                    valid_text + speaker_tokens,
                0, (size_t)caption_tokens);
+    if (dit_profile)
+        iro_dit_profile_add(-1, max_batch, IRO_DIT_PROFILE_CONTEXT_PREP,
+                            sampler_profile_now() - t_context);
 
     /* Project each static condition once per layer. Independent-CFG rows share
        the same K/V values and differ only by mask, so keeping one copy avoids
        replicating the full static cache three/four times. */
+    double t_kv = dit_profile ? sampler_profile_now() : 0.0;
     for (int layer = 0; layer < IRO_DIT_LAYERS; layer++) {
         float *layer_k = cache_k + (size_t)layer * context_one_n;
         float *layer_v = cache_v + (size_t)layer * context_one_n;
@@ -210,6 +235,9 @@ static int sample_euler(const IroDiT *dit,
                                layer_v + (size_t)(valid_text + speaker_tokens) * MODEL_DIM) != 0)
             goto fail;
     }
+    if (dit_profile)
+        iro_dit_profile_add(-1, max_batch, IRO_DIT_PROFILE_KV_CACHE_PREP,
+                            sampler_profile_now() - t_kv);
     memcpy(state, noise, sizeof(float) * latent_one_n);
 
     for (int step = 0; step < config->steps; step++) {
@@ -252,6 +280,7 @@ static int sample_euler(const IroDiT *dit,
                            x_batch, velocity) != 0)
             goto fail;
 
+        double t_update = dit_profile ? sampler_profile_now() : 0.0;
         float dt = timestep_next - timestep;
         for (size_t i = 0; i < latent_one_n; i++) {
             float guided = velocity[i];
@@ -266,6 +295,9 @@ static int sample_euler(const IroDiT *dit,
                     (velocity[i] - velocity[(size_t)caption_uncond_row * latent_one_n + i]);
             state[i] += guided * dt;
         }
+        if (dit_profile)
+            iro_dit_profile_add(-1, batch, IRO_DIT_PROFILE_SAMPLER_UPDATE,
+                                sampler_profile_now() - t_update);
     }
 
     memcpy(output, state, sizeof(float) * latent_one_n);
@@ -273,9 +305,21 @@ static int sample_euler(const IroDiT *dit,
         stats->context_tokens = context_tokens;
         stats->context_cache_bytes = 2 * sizeof(float) * cache_n;
     }
+    if (dit_profile)
+        iro_dit_profile_emit_json("ok", config->steps,
+                                  sequence_length, context_tokens);
+    if (gemm_profile)
+        iro_gemm_profile_emit_json("ok", config->steps,
+                                   sequence_length, context_tokens);
     return 0;
 
 fail:
+    if (dit_profile)
+        iro_dit_profile_emit_json("error", config->steps,
+                                  sequence_length, context_tokens);
+    if (gemm_profile)
+        iro_gemm_profile_emit_json("error", config->steps,
+                                   sequence_length, context_tokens);
     return -1;
 }
 

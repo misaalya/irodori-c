@@ -3,6 +3,7 @@
 #define IRO_DIT_H
 
 #include "irodori.h"
+#include "ops.h"
 
 #define IRO_DIT_LAYERS 12
 #define IRO_DIT_MODEL_DIM 1280
@@ -43,6 +44,19 @@ typedef struct {
     const float *w3;
 } IroSwiGLU;
 
+/* Opt-in W8A8 copy of the dense per-layer projections.  Owned by the engine,
+   built once from the FP32 checkpoint, and borrowed by IroDiT.int8.  Small
+   projections (AdaLN, conditioner, in/out, context K/V) and attention
+   QK^T/PV stay FP32. */
+typedef struct {
+    IroInt8Weight wq, wk, wv, gate, wo, w1, w2, w3;
+} IroDiTInt8Layer;
+
+typedef struct {
+    IroDiTInt8Layer layer[IRO_DIT_LAYERS];
+    size_t bytes;
+} IroDiTInt8;
+
 typedef struct {
     const float *cond_w0;
     const float *cond_w1;
@@ -57,9 +71,51 @@ typedef struct {
     IroJointAttention attention[IRO_DIT_LAYERS];
     IroSwiGLU mlp[IRO_DIT_LAYERS];
     float norm_eps;
+    IroPackedCache *packed_cache; /* Borrowed from owning engine; optional. */
+    const IroDiTInt8 *int8; /* Borrowed from owning engine; NULL keeps FP32. */
 } IroDiT;
 
+typedef enum {
+    IRO_DIT_PROFILE_ALLOCATION = 0,
+    IRO_DIT_PROFILE_CONDITIONER,
+    IRO_DIT_PROFILE_INPUT_PROJECTION,
+    IRO_DIT_PROFILE_CONTEXT_PREP,
+    IRO_DIT_PROFILE_KV_CACHE_PREP,
+    IRO_DIT_PROFILE_ADALN_PARAMS,
+    IRO_DIT_PROFILE_ADALN_APPLY,
+    IRO_DIT_PROFILE_QKVG_PROJECTION,
+    IRO_DIT_PROFILE_RMSNORM_ROPE,
+    IRO_DIT_PROFILE_KV_PACK,
+    IRO_DIT_PROFILE_QK_GEMM,
+    IRO_DIT_PROFILE_SOFTMAX,
+    IRO_DIT_PROFILE_PV_GEMM,
+    IRO_DIT_PROFILE_ATTENTION_GATE,
+    IRO_DIT_PROFILE_ATTENTION_OUTPUT,
+    IRO_DIT_PROFILE_W1_W3,
+    IRO_DIT_PROFILE_SILU_GATE,
+    IRO_DIT_PROFILE_W2,
+    IRO_DIT_PROFILE_RESIDUAL,
+    IRO_DIT_PROFILE_FINAL_OUTPUT,
+    IRO_DIT_PROFILE_SAMPLER_UPDATE,
+    IRO_DIT_PROFILE_BUCKET_COUNT
+} IroDiTProfileBucket;
+
+/* O1 profiler. IRO_DIT_PROFILE=1 enables monotonic timing and one JSON record
+   per generation. layer=-1 denotes sampler/global work; batch is the active
+   CFG batch (1..4). */
+int iro_dit_profile_enabled(void);
+void iro_dit_profile_reset(void);
+void iro_dit_profile_add(int layer, int batch, IroDiTProfileBucket bucket,
+                         double seconds);
+void iro_dit_profile_emit_json(const char *status, int steps,
+                               int sequence_length, int context_tokens);
+
 int iro_dit_init(IroDiT *d, const IroSafetensors *st);
+
+/* Quantize every dense projection of d into dst (dst must be zeroed). The
+   FP32 tensors stay untouched; d->int8 is not modified by this call. */
+int iro_dit_int8_quantize(IroDiTInt8 *dst, const IroDiT *d);
+void iro_dit_int8_free(IroDiTInt8 *q);
 
 /* t[B] -> timestep embedding [B,512] -> cond [B,3840]. */
 int iro_dit_condition(const IroDiT *d, const float *t, int B, float *cond);

@@ -1,342 +1,282 @@
 # Irodori C
 
-Implementasi inference CPU dalam C untuk
-[`Aratako/Irodori-TTS-v4.1-Small`](https://huggingface.co/Aratako/Irodori-TTS-v4.1-Small).
-Engine membaca bobot FP32 langsung dari safetensors dengan `mmap` dan dapat
-menghasilkan audio text-to-speech, caption/style-conditioned speech, serta
-voice cloning dari WAV referensi.
+A dependency-light CPU inference engine, written in C, for
+[`Aratako/Irodori-TTS-v4.1-Small`](https://huggingface.co/Aratako/Irodori-TTS-v4.1-Small)
+(Japanese text-to-speech: rectified-flow DiT + Semantic-DACVAE codec). The engine
+reads the original FP32 safetensors checkpoint through `mmap` and produces
+48 kHz mono PCM16 WAV for plain text, caption/style-conditioned speech, and
+voice cloning from a reference WAV.
 
-Runtime utama tidak memerlukan Python, PyTorch, ONNX, atau framework inference.
-Python hanya dipakai sekali untuk mengunduh dan menyiapkan aset model, serta
-untuk benchmark/parity pengembangan. Output berupa WAV mono PCM16 48 kHz.
+The runtime needs no Python, PyTorch or ONNX. Python is used once to download
+and convert assets, and for the development benchmark/parity tooling.
 
-> Status: proyek masih dalam pengembangan. Jalur text, caption, clone, dan
-> clone+caption sudah berfungsi, tetapi inference FP32 40-step belum realtime
-> pada CPU kelas laptop dua core.
+Base implementation: OpenAI Codex. Performance work, int8 paths, quality
+gates and benchmark tooling: Claude. See [Credits](#credits).
 
-## Fitur
+## Highlights
 
-- Text normalization dan tokenizer Unigram/byte fallback dalam C.
-- ModernBERT-ja encoder, duration predictor, RF-DiT, dan Euler CFG dalam C.
-- DACVAE encoder/decoder untuk voice cloning dan audio 48 kHz.
-- Independent CFG untuk text, speaker reference, dan caption.
-- Backend scalar portabel serta backend CBLAS berperforma tinggi.
-- Engine reusable untuk beberapa request tanpa memuat ulang semua bobot.
-- Pembacaan safetensors melalui `mmap` dan pelepasan halaman bobot yang sudah
-  tidak dibutuhkan untuk menekan peak RSS.
+- Text normalization + Unigram/byte-fallback tokenizer, ModernBERT-ja text
+  encoder, duration predictor, RF-DiT with independent CFG (text, speaker,
+  caption), Euler sampler, DACVAE encoder/decoder and speaker encoder — all in C.
+- FP32 path is bit-comparable to the PyTorch reference (PCM16 within a few
+  LSB, golden tensor gates).
+- Optional **int8 (W8A8) DiT** and **int8 codec** paths using AVX-512 VNNI
+  through oneMKL: on a 2-core laptop CPU text-to-speech runs **4.5× faster
+  than the PyTorch reference** at 8 Euler steps, with ~3× less RAM.
+- Reusable engine API: load once, serve many requests; prepared-reference
+  objects for repeated voice cloning.
+- Audio-level quality gates (calibrated spectral distance, ASR CER, blind A/B
+  packages) for every numerically non-identical path.
 
-## Kebutuhan sistem
+## Requirements
 
-Untuk build Linux yang direkomendasikan:
+Linux x86-64 (tested on Ubuntu/Pop!_OS, GCC). For the recommended build:
 
 ```sh
-sudo apt update
 sudo apt install build-essential libopenblas-dev python3 python3-venv git
 ```
 
-Di macOS, pasang Command Line Tools. Target `make blas` otomatis memakai
-Accelerate.framework.
+Optional int8 paths require a CPU with AVX-512 VNNI (Ice Lake or newer,
+Zen 4) and an oneMKL runtime (see [Precision options](#precision-options)).
+macOS builds use Accelerate.framework for the FP32 path.
 
-RAM yang dibutuhkan bergantung mode. Siapkan beberapa GiB RAM kosong dan ruang
-disk sekitar 2 GB untuk checkpoint utama, codec asli, dan aset hasil ekspor.
-Repository ini sengaja tidak menyertakan model weights atau golden tensor.
+Disk: ~3 GB for the FP32 checkpoint plus ~0.4 GB for exported codec assets.
+RAM: 1.6–2.1 GB (int8) or 2.6–3.1 GB (FP32) per engine, depending on mode.
 
 ## Quick start
 
-### 1. Clone source
-
 ```sh
-git clone https://github.com/misaalya/irodori-c.git
-git clone https://github.com/Aratako/Irodori-TTS.git
-cd irodori-c
-```
+git clone https://github.com/misaalya/irodori-tts.git
+cd irodori-tts/irodori-c
+git clone https://github.com/Aratako/Irodori-TTS.git ../Irodori-TTS   # upstream source, needed by tools/
 
-Letakkan kedua repository sebagai sibling seperti berikut:
-
-```text
-workspace/
-├── irodori-c/
-└── Irodori-TTS/
-```
-
-Source upstream diperlukan oleh tool persiapan tokenizer dan benchmark. Ia
-tidak diperlukan oleh executable C setelah semua aset selesai dibuat.
-
-### 2. Buat environment untuk menyiapkan aset
-
-Contoh berikut memakai environment di repository upstream agar target MKL
-opsional juga dapat menemukannya:
-
-```sh
 python3 -m venv ../Irodori-TTS/.venv
 IRO_PY=../Irodori-TTS/.venv/bin/python
+"$IRO_PY" -m pip install --upgrade pip huggingface-hub safetensors torch --index-url https://download.pytorch.org/whl/cpu
 
-"$IRO_PY" -m pip install --upgrade pip
-"$IRO_PY" -m pip install huggingface-hub safetensors
-"$IRO_PY" -m pip install torch \
-  --index-url https://download.pytorch.org/whl/cpu
-```
-
-### 3. Unduh model dan codec
-
-```sh
 mkdir -p downloads/irodori downloads/dacvae weights
-
-../Irodori-TTS/.venv/bin/hf download \
-  Aratako/Irodori-TTS-v4.1-Small \
-  model.safetensors tokenizer/tokenizer.json \
-  --local-dir downloads/irodori
-
-../Irodori-TTS/.venv/bin/hf download \
-  Aratako/Semantic-DACVAE-Japanese-32dim \
-  weights.pth \
-  --local-dir downloads/dacvae
-```
-
-### 4. Siapkan aset runtime C
-
-```sh
-IRO_PY=../Irodori-TTS/.venv/bin/python
+../Irodori-TTS/.venv/bin/hf download Aratako/Irodori-TTS-v4.1-Small model.safetensors tokenizer/tokenizer.json --local-dir downloads/irodori
+../Irodori-TTS/.venv/bin/hf download Aratako/Semantic-DACVAE-Japanese-32dim weights.pth --local-dir downloads/dacvae
 
 cp downloads/irodori/model.safetensors weights/model.safetensors
+"$IRO_PY" tools/compile_tokenizer.py downloads/irodori/tokenizer/tokenizer.json weights/tokenizer.bin weights/tokenizer_vectors.json
+"$IRO_PY" tools/export_dacvae_decoder.py downloads/dacvae/weights.pth weights/dacvae_decoder.safetensors
+"$IRO_PY" tools/export_dacvae_encoder.py downloads/dacvae/weights.pth weights/dacvae_encoder.safetensors
 
-"$IRO_PY" tools/compile_tokenizer.py \
-  downloads/irodori/tokenizer/tokenizer.json \
-  weights/tokenizer.bin \
-  weights/tokenizer_vectors.json
-
-"$IRO_PY" tools/export_dacvae_decoder.py \
-  downloads/dacvae/weights.pth \
-  weights/dacvae_decoder.safetensors
-
-"$IRO_PY" tools/export_dacvae_encoder.py \
-  downloads/dacvae/weights.pth \
-  weights/dacvae_encoder.safetensors
+make blas            # ./irodori-blas (OpenBLAS, FP32)
 ```
 
-File runtime yang dihasilkan:
-
-```text
-weights/model.safetensors
-weights/tokenizer.bin
-weights/dacvae_decoder.safetensors
-weights/dacvae_encoder.safetensors
-```
-
-### 5. Build
-
-Build berperforma tinggi yang direkomendasikan:
-
-```sh
-make blas
-```
-
-Executable-nya adalah `./irodori-blas`. Build scalar dapat dibuat dengan
-`make`; executable `./irodori` terutama berguna sebagai oracle portabel dan
-akan jauh lebih lambat untuk inference penuh.
-
-## Cara memakai
-
-Contoh di bawah memakai dua thread. Ganti sesuai jumlah core fisik CPU:
+Generate speech (two threads = two physical cores on a typical laptop):
 
 ```sh
 export IRO_NUM_THREADS=2
-export IRO_MODEL="$PWD/weights/model.safetensors"
-export IRO_TOKENIZER="$PWD/weights/tokenizer.bin"
-export IRO_DECODER="$PWD/weights/dacvae_decoder.safetensors"
-export IRO_ENCODER="$PWD/weights/dacvae_encoder.safetensors"
+./irodori-blas --text 'こんにちは。今日はいい天気ですね。' --steps 40 --seed 42 --out result.wav
 ```
 
-Environment variable tersebut opsional. Semua path juga dapat diberikan
-langsung melalui argumen CLI.
+## Usage
 
-### Text-to-speech
+| Mode | Command |
+|---|---|
+| Text-to-speech | `./irodori-blas --text '…' --out out.wav` |
+| Caption / style | `./irodori-blas --text '…' --caption '落ち着いた自然な女性の声で、やわらかく話す。' --out out.wav` |
+| Voice cloning | `./irodori-blas --text '…' --ref reference.wav --out out.wav` |
+| Clone + caption | `./irodori-blas --text '…' --ref reference.wav --caption '明るく元気な声で。' --out out.wav` |
 
-```sh
-./irodori-blas \
-  --text 'こんにちは。今日はいい天気ですね。' \
-  --steps 40 \
-  --seed 42 \
-  --out result.wav
-```
+Reference WAVs may be PCM16/24/32 or float32, any sample rate, mono or
+multichannel; the engine downmixes, resamples to 48 kHz, normalizes loudness,
+encodes with DACVAE and builds the speaker condition. Clean single-speaker
+recordings give the most stable clones.
 
-### Caption atau style conditioning
+Main options:
 
-```sh
-./irodori-blas \
-  --text 'こんにちは。今日はいい天気ですね。' \
-  --caption '落ち着いた自然な女性の声で、やわらかく話す。' \
-  --steps 40 \
-  --seed 42 \
-  --out styled.wav
-```
-
-Caption menjelaskan gaya, emosi, atau karakter suara. Caption-only tidak
-memerlukan reference WAV.
-
-### Voice cloning
-
-```sh
-./irodori-blas \
-  --text 'この声を使って、新しい文章を読み上げます。' \
-  --ref reference.wav \
-  --steps 40 \
-  --seed 42 \
-  --out cloned.wav
-```
-
-WAV referensi dapat berupa PCM16/24/32 atau float32 dan boleh multichannel.
-Engine melakukan downmix, resampling ke 48 kHz, loudness normalization, DACVAE
-encoding, dan speaker conditioning. Referensi yang bersih dengan satu pembicara
-memberi hasil paling stabil.
-
-### Voice cloning dengan caption
-
-```sh
-./irodori-blas \
-  --text 'この声を使って、新しい文章を読み上げます。' \
-  --ref reference.wav \
-  --caption '明るく元気な声で、少し速めに話す。' \
-  --steps 40 \
-  --seed 42 \
-  --out styled-clone.wav
-```
-
-### Memberikan semua path lewat CLI
-
-```sh
-IRO_NUM_THREADS=2 ./irodori-blas \
-  --text '生成する文章' \
-  --model weights/model.safetensors \
-  --tokenizer weights/tokenizer.bin \
-  --encoder weights/dacvae_encoder.safetensors \
-  --decoder weights/dacvae_decoder.safetensors \
-  --ref reference.wav \
-  --steps 40 \
-  --out output.wav
-```
-
-Opsi utama:
-
-| Opsi | Arti | Default |
+| Option | Meaning | Default |
 |---|---|---|
-| `--text` | Teks yang akan dibacakan | wajib |
-| `--caption` | Deskripsi gaya/emosi suara | tidak aktif |
-| `--ref` | WAV untuk voice cloning | tidak aktif |
-| `--steps` | Jumlah Euler sampling step | `40` |
-| `--seed` | Seed noise deterministik | `42` |
-| `--out` | Lokasi WAV hasil | `out.wav` |
-| `--model` | Checkpoint Irodori FP32 | `IRO_MODEL` atau `weights/model.safetensors` |
-| `--tokenizer` | Tokenizer binary | `IRO_TOKENIZER` atau `weights/tokenizer.bin` |
-| `--decoder` | DACVAE decoder | `IRO_DECODER` atau path default |
-| `--encoder` | DACVAE encoder untuk clone | `IRO_ENCODER` atau path default |
-| `--noise` | Noise float32 eksternal untuk regression | tidak aktif |
-| `--dump-dir` | Simpan intermediate tensor untuk diagnosis | tidak aktif |
+| `--text` | Japanese text to synthesize | required |
+| `--caption` | Style/emotion description | off |
+| `--ref` | Reference WAV for voice cloning | off |
+| `--steps` | Euler sampling steps (8 = fast preview, 40 = quality) | `40` |
+| `--seed` | Deterministic noise seed | `42` |
+| `--out` | Output WAV path | `out.wav` |
+| `--dit-precision` | `fp32` or `int8` for the DiT (see below) | `fp32` |
+| `--codec-precision` | `fp32` or `int8` for the DACVAE decoder | `fp32` |
+| `--model`, `--tokenizer`, `--decoder`, `--encoder` | Asset paths (also `IRO_MODEL`, `IRO_TOKENIZER`, `IRO_DECODER`, `IRO_ENCODER`) | `weights/…` |
+| `--noise`, `--dump-dir` | Regression/diagnostic inputs and tensor dumps | off |
 
-Nilai `--steps 8` berguna untuk test cepat, sedangkan 40 adalah konfigurasi
-default kualitas. Seed yang sama menghasilkan noise yang sama dalam backend C;
-hasil antarbackend BLAS dapat memiliki perbedaan rounding FP32 kecil.
+Environment: `IRO_NUM_THREADS` (BLAS threads), `IRO_DIT_PRECISION`,
+`IRO_CODEC_PRECISION`.
 
-## Backend MKL opsional
+### Compatible checkpoints
 
-Jika environment `../Irodori-TTS/.venv` berisi PyTorch CPU wheel, build berikut
-memakai oneMKL yang dibundel oleh wheel tersebut:
+Any checkpoint with the v4.1-Small architecture works unchanged, e.g. the
+fine-tune [`phasefield-audio/Irodori-TTS-v4.1-Anime`](https://huggingface.co/phasefield-audio/Irodori-TTS-v4.1-Anime)
+(`--model /path/to/anime/model.safetensors`; same tokenizer and codec). The
+engine loads FP32 safetensors only — the `int8-*`/`int4-*`/`float8-*`
+torchao variants published upstream are PyTorch formats and are not needed:
+the engine quantizes on its own at load time.
 
-```sh
-make mkl
-IRO_NUM_THREADS=2 ./irodori-mkl --text 'こんにちは。' --out mkl.wav
-```
+## Precision options
 
-Backend ini merupakan target pengembangan dan bergantung pada library PyTorch
-CPU saat runtime. Launcher menetapkan mode kompatibilitas AVX2 karena mode MKL
-otomatis belum memenuhi seluruh regression tolerance pada mesin pengembangan.
-Gunakan `irodori-blas` untuk runtime CBLAS mandiri.
+FP32 is the default and matches the PyTorch reference. Two opt-in integer
+paths trade bit-exactness for speed; both keep the model, step count and all
+control paths unchanged and quantize **at engine init** from the FP32 file.
 
-## Preprocess reference saja
+| Path | What is quantized | Payload | Effect |
+|---|---|---|---|
+| `--dit-precision int8` | The eight dense projections of every DiT block (`wq/wk/wv/gate/wo/w1/w2/w3`), the same layer set as upstream's `int8-dynamic` release. Weights per output channel, activations per row (asymmetric uint8) with a two-term residual on the W2 input. AdaLN, conditioner, context K/V, attention and everything outside the DiT stay FP32. | 257 MiB (FP32 pages of replaced weights are released) | DiT sampling ~3× faster |
+| `--codec-precision int8` | Conv7/Conv1/ConvTranspose of the DACVAE decoder via a uint8 im2col with per-output-row scales (one exact int32 GEMM per block); residual term on the last stage. Snake activations, biases and the final tap stay FP32. | 63 MiB | decode ~2× faster |
 
-Untuk menghasilkan mean latent DACVAE dari WAV tanpa menjalankan TTS:
-
-```sh
-./irodori-blas --encode-reference \
-  weights/dacvae_encoder.safetensors \
-  reference.wav \
-  reference.f32
-```
-
-File `.f32` ini merupakan artefak diagnosis, bukan WAV yang bisa diputar.
-
-## Test
-
-Test yang tidak membutuhkan model besar:
+Backend requirements: the integer GEMM comes from oneMKL
+(`cblas_gemm_s8u8s32`). Build the standalone oneMKL target with `MKL_ROOT`
+pointing at a directory holding `include/mkl.h` and `lib/libmkl_rt.so.3`
+(for example a `pip install mkl mkl-include` prefix):
 
 ```sh
-make test-audio
-make test-model-io
-make audit-warnings
+make irodori-onemkl MKL_ROOT=/path/to/onemkl
+IRO_NUM_THREADS=2 ./irodori-onemkl --text 'こんにちは。' --dit-precision int8 --codec-precision int8 --out fast.wav
 ```
 
-Tokenizer boundary test dapat dijalankan setelah `weights/tokenizer.bin` dibuat:
+The engine selects the `AVX512_E1` (VNNI) MKL branch when `MKL_CBWR` is
+unset and verifies at init that the backend accumulates exactly; the
+`AVX2`/`AVX512` conditional-numerics branches saturate int16 intermediates
+and are refused. Builds without oneMKL accept the int8 flags but fall back to
+a slow scalar reference kernel (correct, for tests only).
+
+Quantization knobs for experiments (not product settings):
+`IRO_INT8_RESIDUAL`, `IRO_INT8_MASK`, `IRO_INT8_EMULATE`, `IRO_INT8_STATS`,
+`IRO_INT8_DUMP`, `IRO_CODEC_INT8_RESIDUAL`, `IRO_CODEC_INT8_RESIDUAL_STAGES`,
+`IRO_CODEC_INT8_MASK`.
+
+## Performance
+
+Measured on an Intel i3-1005G1 (2 cores / 4 threads, sustained ~2.0 GHz,
+AVX-512 VNNI), 2 threads pinned to distinct physical cores, 8 Euler steps,
+seed 42, identical initial noise, one warm-up plus 5 timed repeats with
+Python and C interleaved, host ≥90% idle before every scenario. Latency is
+the warm end-to-end time from request to a fully written WAV; RTF = latency /
+audio duration (lower is better).
+
+| Scenario | PyTorch FP32 | C FP32 | C int8 DiT | C int8 DiT + codec | RTF (full int8) | Peak RSS Python → C full int8 |
+|---|---:|---:|---:|---:|---:|---:|
+| Text only | 25.1 s | 12.6 s (1.97×) | 8.2 s (3.09×) | **5.5 s (4.55×)** | 1.23 | 5.0 → 1.6 GB |
+| Caption only | 29.1 s | 16.3 s (1.81×) | 9.7 s (3.06×) | **7.2 s (4.03×)** | 1.54 | 5.1 → 1.7 GB |
+| Voice clone | 37.3 s | 21.1 s (1.73×) | 14.9 s (2.51×) | **12.3 s (3.03×)** | 2.58 | 5.4 → 2.0 GB |
+| Clone + caption | 40.5 s | 24.5 s (1.68×) | 16.0 s (2.58×) | **12.6 s (3.20×)** | 2.72 | 5.5 → 2.1 GB |
+
+At 40 steps the C int8 DiT path is 2.2–2.5× faster than C FP32. The FP32
+engine runs at ~94% of this host's SGEMM roofline, so further gains come
+from integer paths, not FP32 kernels. Full reports, figures and raw samples:
+`artifacts/pyc-3scenarios-20260914/`, `artifacts/int8-dit-20260913/`,
+`artifacts/int8-codec-20260914/`.
+
+## Quality
+
+- **FP32**: PCM16 output within 3–58 LSB of PyTorch (SNR 68–85 dB), golden
+  tensor gates for every stage (`make test-*-blas`, `tools/compare_clone_golden.py`).
+- **int8 DiT**: the 8-step Euler sampler is chaotic, so any ~1 % perturbation
+  yields a different valid sample rather than a degraded one; bit-level
+  golden gates do not apply. Against FP32 on a 4-mode × 6-text corpus:
+  STOI 0.965–0.983, log-mel distance 1.5–1.7 dB (rounding-only floor: 1.000 /
+  0.1 dB; a different seed: 0.25 / 21 dB). ASR CER (kotoba-whisper-v2.0)
+  identical to FP32.
+- **int8 codec**: deterministic given the latent — SNR 32–33 dB vs the FP32
+  decoder (bounded by int8 weights), log-mel distance 0.6–1.4 dB, STOI ≥0.99,
+  ASR CER identical.
+- Blind A/B listening packages are generated by `tools/build_int8_blind_ab.py`
+  (`artifacts/*/blind-ab*`); human ratings are still pending.
+
+If you need output that reproduces the PyTorch reference exactly, use the
+FP32 path.
+
+## Engine API
+
+```c
+#include "generate.h"
+
+IroEngine engine = {0};
+IroEngineConfig config = {
+    .model_path = "weights/model.safetensors",
+    .tokenizer_path = "weights/tokenizer.bin",
+    .decoder_path = "weights/dacvae_decoder.safetensors",
+    .encoder_path = "weights/dacvae_encoder.safetensors",   /* optional, for --ref */
+    .dit_precision = IRO_DIT_PRECISION_INT8,                 /* or FP32 */
+    .codec_precision = IRO_DIT_PRECISION_INT8,
+};
+iro_engine_init(&engine, &config);
+
+IroPreparedReference voice = {0};
+iro_engine_prepare_reference(&engine, "reference.wav", &voice, NULL);  /* once per voice */
+
+IroGenerateConfig request = {
+    .text = "生成する文章", .prepared_reference = &voice,
+    .output_path = "output.wav", .steps = 40, .seed = 42,
+};
+IroGenerateStats stats = {0};
+iro_engine_generate(&engine, &request, &stats);   /* repeat for more requests */
+
+iro_prepared_reference_free(&voice);
+iro_engine_free(&engine);
+```
+
+Init/generate/free on one engine must be serialized. `IroGenerateStats`
+reports stage timings, latent frames, output samples, effective precisions
+and int8 payload sizes. Zero-initialize public structs so new fields keep
+their defaults.
+
+## Tests and tooling
 
 ```sh
-make test-tokenizer-boundaries
+make test-audio test-model-io test-int8-ops          # no model needed
+make test-tokenizer-boundaries                        # needs weights/tokenizer.bin
+make audit                                            # warnings, sanitizers, static analysis
+make test-pipeline-blas MODEL=path/to/model.safetensors             # FP32 golden gate
+make test-int8-ops-onemkl test-int8-engine-onemkl test-int8-engine-sanitize MKL_ROOT=… MODEL=…
 ```
 
-Golden tensor lengkap tidak disertakan karena ukurannya besar. Tool `dump_*.py`
-di direktori `tools/` dapat membuat fixture dari runtime Python upstream untuk
-pengembangan parity. Jangan memakai golden yang dibuat oleh kandidat C sebagai
-referensi kualitas kandidat itu sendiri.
+Benchmark and evaluation tools (`tools/`, run with the upstream venv):
 
-## Benchmark
+| Tool | Purpose |
+|---|---|
+| `bench_four_modes.py` | Interleaved Python-vs-C benchmark with idle gating, provenance and quality gates |
+| `bench_speed_tradeoff.py` | C-vs-C A/B (`--experiment int8`, `codec-int8`, `retention`, `packed`, `reference`) |
+| `plot_three_scenarios.py` | Publication-style latency/stage/RTF/RAM figures and tables |
+| `int8_quality_corpus.py`, `compare_audio_quality.py` | Audio-distance metrics with calibration pairs |
+| `asr_cer.py` | Reference-free intelligibility (character error rate) via Japanese Whisper |
+| `build_int8_blind_ab.py`, `int8_report.py` | Blind listening packages, report tables and figures |
+| `dump_*.py`, `compare_clone_golden.py` | Golden fixtures from the PyTorch runtime and parity checks |
 
-Microbenchmark backend linear:
+Golden tensors and model weights are not part of the repository.
 
-```sh
-make bench-linear
-```
-
-Benchmark Python vs C empat mode memerlukan upstream environment lengkap,
-checkpoint, codec, reference WAV, dan golden fixtures:
-
-```sh
-MODEL="$PWD/weights/model.safetensors"
-REF=/path/to/reference.wav
-
-make irodori-bench-worker
-../Irodori-TTS/.venv/bin/python tools/bench_four_modes.py \
-  --model "$MODEL" \
-  --ref "$REF" \
-  --binary ./irodori-blas \
-  --c-worker ./irodori-bench-worker \
-  --threads 2 \
-  --steps 8,40 \
-  --repeats 5 \
-  --work-dir /tmp/irodori-benchmark
-```
-
-Harness menolak benchmark formal bila host kurang dari 90% idle. Gunakan p50,
-p95, RTF, peak RSS, determinisme, dan parity audio dari summary; jangan memakai
-best-run tunggal sebagai klaim performa.
-
-## Struktur source
+## Source layout
 
 ```text
-main.c                 CLI dan test dispatcher
-generate.c             orchestration text/reference → WAV
-backbone.c              ModernBERT-ja encoder
-duration.c              duration predictor
-dit.c / sampler.c       RF-DiT dan Euler CFG
-dacvae.c                codec encoder/decoder
-speaker.c               speaker encoder
-audio.c                 WAV, resampler, loudness, PCM output
-safetensors.c           mmap safetensors loader
-ops.c                   scalar/CBLAS kernels
-tools/                  persiapan aset, golden, dan benchmark
-tests/                  unit, boundary, dan kernel benchmark
-vendor/utf8proc/        Unicode normalization dependency
+main.c                 CLI and test dispatcher
+generate.c/h           engine lifecycle, request orchestration, prepared references
+backbone.c             ModernBERT-ja text encoder
+condition.c            text/caption projectors
+duration.c             duration predictor
+dit.c/h                RF-DiT blocks, int8 DiT path
+sampler.c/h            Euler CFG sampler with reusable workspace
+dacvae.c/h             DACVAE encoder/decoder, int8 codec path
+speaker.c              speaker encoder
+audio.c                WAV I/O, resampling, loudness, PCM output
+safetensors.c          mmap safetensors loader
+ops.c/h                scalar/CBLAS/oneMKL kernels, int8 primitives
+tools/                 asset preparation, golden dumps, benchmarks, quality tools
+tests/                 unit, boundary, engine and kernel tests
+vendor/utf8proc/       Unicode normalization
+artifacts/             evaluation reports and figures (audio/raw tensors excluded)
 ```
 
-## Catatan keamanan input
+## Credits
 
-Engine memvalidasi header dan ukuran safetensors/WAV, tetapi model serta aset
-sebaiknya tetap diunduh dari sumber tepercaya. Gunakan checkpoint FP32 yang
-sesuai; checkpoint dengan layout atau precision berbeda akan ditolak.
+- Engine base implementation (architecture port, FP32 kernels, golden
+  parity, engine API): **OpenAI Codex**.
+- Refinement (roofline analysis, int8 DiT and codec paths, MKL branch
+  correctness, quality-gate methodology, benchmark and reporting tooling):
+  **Claude** (Anthropic).
+- Model and reference implementation: [Irodori-TTS](https://github.com/Aratako/Irodori-TTS)
+  by Chihiro Arata (MIT), built on Echo-TTS, DACVAE, modernbert-ja and SilentCipher.
+
+Model weights follow the upstream MIT license and its ethical restrictions:
+do not clone voices without consent or produce misleading content. Intel
+oneMKL is distributed under its own license.

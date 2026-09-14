@@ -136,7 +136,23 @@ typedef struct {
     IroEulerWorkspace sampler_workspace;
     int backbone_ready;
     int has_encoder;
+    int retain_frontend_weights;
+    int dit_precision;
+    IroDiTInt8 *dit_int8;
+    double dit_quantize_seconds;
+    int codec_precision;
+    IroDACVAEInt8 *codec_int8;
 } IroEngineImpl;
+
+typedef struct {
+    IroEngineImpl *owner;
+    float *reference_latent;
+    float *speaker_state;
+    int input_samples;
+    int reference_frames;
+    int speaker_tokens;
+    size_t bytes;
+} IroPreparedReferenceImpl;
 
 typedef struct {
     char *normalized;
@@ -152,6 +168,8 @@ typedef struct {
     float *reference_latent, *speaker_state;
     int token_count, caption_tokens, latent_frames, output_samples;
     int reference_frames, speaker_tokens;
+    int reference_latent_borrowed, speaker_state_borrowed;
+    size_t prepared_reference_bytes;
     uint64_t evicted_model_bytes;
     IroAudio reference_audio;
 } IroGenerateRequest;
@@ -164,8 +182,12 @@ static void request_release_conditions(IroGenerateRequest *request) {
     free(request->backbone_state); request->backbone_state = NULL;
     free(request->projected); request->projected = NULL;
     free(request->text_state); request->text_state = NULL;
-    free(request->reference_latent); request->reference_latent = NULL;
-    free(request->speaker_state); request->speaker_state = NULL;
+    if (!request->reference_latent_borrowed) free(request->reference_latent);
+    request->reference_latent = NULL;
+    request->reference_latent_borrowed = 0;
+    if (!request->speaker_state_borrowed) free(request->speaker_state);
+    request->speaker_state = NULL;
+    request->speaker_state_borrowed = 0;
     free(request->caption_ids); request->caption_ids = NULL;
     free(request->caption_mask); request->caption_mask = NULL;
     free(request->caption_backbone); request->caption_backbone = NULL;
@@ -273,7 +295,32 @@ static int prepare_conditions(IroEngineImpl *engine,
             if (dump_failed != 0) return -1;
         }
     }
-    if (config->reference_path) {
+    if (config->prepared_reference) {
+        const IroPreparedReferenceImpl *prepared =
+            config->prepared_reference->impl;
+        if (!prepared || prepared->owner != engine ||
+            !prepared->reference_latent || !prepared->speaker_state ||
+            prepared->reference_frames <= 0 || prepared->speaker_tokens <= 0) {
+            fprintf(stderr,
+                    "generate: prepared reference bukan milik engine ini\n");
+            return -1;
+        }
+        request->reference_latent = prepared->reference_latent;
+        request->speaker_state = prepared->speaker_state;
+        request->reference_frames = prepared->reference_frames;
+        request->speaker_tokens = prepared->speaker_tokens;
+        request->reference_latent_borrowed = 1;
+        request->speaker_state_borrowed = 1;
+        request->prepared_reference_bytes = prepared->bytes;
+        if (dump_f32(config->dump_dir, "reference_latent",
+                     request->reference_latent,
+                     (size_t)request->reference_frames * LATENT_DIM) != 0 ||
+            dump_f32(config->dump_dir, "speaker_state", request->speaker_state,
+                     (size_t)request->speaker_tokens * BACKBONE_DIM) != 0) {
+            fprintf(stderr, "generate: gagal menulis tensor reference\n");
+            return -1;
+        }
+    } else if (config->reference_path) {
         if (!engine->has_encoder) {
             fprintf(stderr, "generate: engine tidak memiliki reference encoder\n");
             return -1;
@@ -318,15 +365,17 @@ static int prepare_conditions(IroEngineImpl *engine,
     if (request->latent_frames <= 0) return -1;
     /* The DiT never reads encoder/duration tensors again. Evict their clean
        mmap pages before batch-3 CFG so resident weights do not accumulate. */
-    request->evicted_model_bytes += iro_st_drop_prefix(
-        &engine->model_st, "pretrained_text_backbone.");
-    request->evicted_model_bytes += iro_st_drop_prefix(&engine->model_st, "text_encoder.");
-    request->evicted_model_bytes += iro_st_drop_prefix(&engine->model_st, "text_norm.");
-    request->evicted_model_bytes += iro_st_drop_prefix(&engine->model_st, "caption_encoder.");
-    request->evicted_model_bytes += iro_st_drop_prefix(&engine->model_st, "caption_norm.");
-    request->evicted_model_bytes += iro_st_drop_prefix(&engine->model_st, "speaker_encoder.");
-    request->evicted_model_bytes += iro_st_drop_prefix(&engine->model_st, "speaker_norm.");
-    request->evicted_model_bytes += iro_st_drop_prefix(&engine->model_st, "duration_predictor.");
+    if (!engine->retain_frontend_weights) {
+        request->evicted_model_bytes += iro_st_drop_prefix(
+            &engine->model_st, "pretrained_text_backbone.");
+        request->evicted_model_bytes += iro_st_drop_prefix(&engine->model_st, "text_encoder.");
+        request->evicted_model_bytes += iro_st_drop_prefix(&engine->model_st, "text_norm.");
+        request->evicted_model_bytes += iro_st_drop_prefix(&engine->model_st, "caption_encoder.");
+        request->evicted_model_bytes += iro_st_drop_prefix(&engine->model_st, "caption_norm.");
+        request->evicted_model_bytes += iro_st_drop_prefix(&engine->model_st, "speaker_encoder.");
+        request->evicted_model_bytes += iro_st_drop_prefix(&engine->model_st, "speaker_norm.");
+        request->evicted_model_bytes += iro_st_drop_prefix(&engine->model_st, "duration_predictor.");
+    }
     clock_gettime(CLOCK_MONOTONIC, &end);
 
     if (stats) {
@@ -334,6 +383,8 @@ static int prepare_conditions(IroEngineImpl *engine,
         stats->latent_frames = request->latent_frames;
         stats->speaker_tokens = request->speaker_tokens;
         stats->caption_tokens = request->caption_tokens;
+        stats->prepared_reference_used = config->prepared_reference != NULL;
+        stats->prepared_reference_bytes = request->prepared_reference_bytes;
         stats->evicted_model_bytes = request->evicted_model_bytes;
         stats->encode_seconds = elapsed(begin, end);
     }
@@ -433,7 +484,12 @@ static int decode_output(IroEngineImpl *engine,
 
 int iro_engine_init(IroEngine *engine, const IroEngineConfig *config) {
     if (!engine || !config || !config->model_path || !config->tokenizer_path ||
-        !config->decoder_path || engine->impl)
+        !config->decoder_path || engine->impl ||
+        (config->retain_frontend_weights != 0 && config->retain_frontend_weights != 1) ||
+        (config->dit_precision != IRO_DIT_PRECISION_FP32 &&
+         config->dit_precision != IRO_DIT_PRECISION_INT8) ||
+        (config->codec_precision != IRO_DIT_PRECISION_FP32 &&
+         config->codec_precision != IRO_DIT_PRECISION_INT8))
         return -1;
     IroEngineImpl *impl = calloc(1, sizeof(*impl));
     if (!impl) return -1;
@@ -441,6 +497,7 @@ int iro_engine_init(IroEngine *engine, const IroEngineConfig *config) {
     impl->model_st.fd = -1;
     impl->decoder_st.fd = -1;
     impl->encoder_st.fd = -1;
+    impl->retain_frontend_weights = config->retain_frontend_weights;
 
     if (iro_tok_load(config->tokenizer_path, &impl->tokenizer) != 0 ||
         iro_st_load(config->model_path, &impl->model_st) != 0 ||
@@ -462,10 +519,73 @@ int iro_engine_init(IroEngine *engine, const IroEngineConfig *config) {
             goto fail;
         impl->has_encoder = 1;
     }
+    if (config->packed_cache_budget) {
+        impl->dit.packed_cache = iro_packed_cache_create(config->packed_cache_budget);
+        if (!impl->dit.packed_cache) goto fail;
+    }
+    impl->dit_precision = config->dit_precision;
+    if (config->dit_precision == IRO_DIT_PRECISION_INT8) {
+        struct timespec q0, q1;
+        (void)iro_int8_prepare_backend();
+        if (iro_int8_selfcheck() != 0) {
+            fprintf(stderr,
+                    "generate: GEMM int8 backend ini tidak eksak (saturasi); "
+                    "pakai MKL_CBWR=AVX512_E1/AUTO pada CPU dengan VNNI, atau "
+                    "dit_precision fp32\n");
+            goto fail;
+        }
+        clock_gettime(CLOCK_MONOTONIC, &q0);
+        impl->dit_int8 = calloc(1, sizeof(*impl->dit_int8));
+        if (!impl->dit_int8 ||
+            iro_dit_int8_quantize(impl->dit_int8, &impl->dit) != 0)
+            goto fail;
+        impl->dit.int8 = impl->dit_int8;
+        /* The quantized copies replace these FP32 tensors for the engine's
+           lifetime; release their freshly-touched pages so peak RSS does not
+           carry both representations.  Pointers stay valid. */
+        if (!impl->retain_frontend_weights) {
+            static const char *const replaced[] = {
+                "attention.wq.", "attention.wk.", "attention.wv.",
+                "attention.gate.", "attention.wo.", "mlp.",
+            };
+            for (int layer = 0; layer < IRO_DIT_LAYERS; layer++) {
+                for (size_t i = 0; i < sizeof(replaced) / sizeof(replaced[0]); i++) {
+                    char prefix[64];
+                    snprintf(prefix, sizeof(prefix), "blocks.%d.%s", layer,
+                             replaced[i]);
+                    (void)iro_st_drop_prefix(&impl->model_st, prefix);
+                }
+            }
+        }
+        clock_gettime(CLOCK_MONOTONIC, &q1);
+        impl->dit_quantize_seconds = elapsed(q0, q1);
+    }
+    impl->codec_precision = config->codec_precision;
+    if (config->codec_precision == IRO_DIT_PRECISION_INT8) {
+        (void)iro_int8_prepare_backend();
+        if (iro_int8_selfcheck() != 0) {
+            fprintf(stderr,
+                    "generate: GEMM int8 backend ini tidak eksak (saturasi); "
+                    "codec_precision int8 ditolak\n");
+            goto fail;
+        }
+        impl->codec_int8 = calloc(1, sizeof(*impl->codec_int8));
+        if (!impl->codec_int8 ||
+            iro_dacvae_int8_quantize(impl->codec_int8, &impl->decoder) != 0)
+            goto fail;
+        impl->decoder.int8 = impl->codec_int8;
+        if (!impl->retain_frontend_weights)
+            (void)iro_st_drop_prefix(&impl->decoder_st, "decoder.model.");
+    }
     engine->impl = impl;
     return 0;
 
 fail:
+    iro_dacvae_int8_free(impl->codec_int8);
+    free(impl->codec_int8);
+    iro_dit_int8_free(impl->dit_int8);
+    free(impl->dit_int8);
+    iro_packed_cache_free(impl->dit.packed_cache);
     if (impl->backbone_ready) iro_backbone_free(&impl->backbone);
     iro_tok_free(&impl->tokenizer);
     iro_st_free(&impl->model_st);
@@ -475,9 +595,75 @@ fail:
     return -1;
 }
 
+int iro_engine_prepare_reference(IroEngine *engine, const char *reference_path,
+                                 IroPreparedReference *reference,
+                                 IroPreparedReferenceStats *stats) {
+    if (!engine || !engine->impl || !reference_path || !reference_path[0] ||
+        !reference || reference->impl)
+        return -1;
+    if (stats) memset(stats, 0, sizeof(*stats));
+    IroEngineImpl *owner = engine->impl;
+    if (!owner->has_encoder) {
+        fprintf(stderr, "generate: engine tidak memiliki reference encoder\n");
+        return -1;
+    }
+
+    IroPreparedReferenceImpl *prepared = calloc(1, sizeof(*prepared));
+    if (!prepared) return -1;
+    IroAudio audio = {0};
+    struct timespec begin, end;
+    clock_gettime(CLOCK_MONOTONIC, &begin);
+    if (iro_prepare_reference_wav(reference_path, -16.0f, &audio, NULL, NULL) != 0 ||
+        audio.sample_count > INT_MAX ||
+        iro_dacvae_encode_mean(&owner->reference_encoder, audio.samples,
+                               audio.sample_count, &prepared->reference_latent,
+                               &prepared->reference_frames, NULL, NULL) != 0 ||
+        iro_speaker_encode(&owner->speaker_encoder, prepared->reference_latent,
+                           prepared->reference_frames, &prepared->speaker_state,
+                           &prepared->speaker_tokens, NULL, NULL) != 0)
+        goto fail;
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    prepared->owner = owner;
+    prepared->input_samples = (int)audio.sample_count;
+    prepared->bytes = sizeof(float) *
+        ((size_t)prepared->reference_frames * LATENT_DIM +
+         (size_t)prepared->speaker_tokens * BACKBONE_DIM);
+    iro_audio_free(&audio);
+    reference->impl = prepared;
+    if (stats) {
+        stats->input_samples = prepared->input_samples;
+        stats->reference_frames = prepared->reference_frames;
+        stats->speaker_tokens = prepared->speaker_tokens;
+        stats->bytes = prepared->bytes;
+        stats->prepare_seconds = elapsed(begin, end);
+    }
+    return 0;
+
+fail:
+    iro_audio_free(&audio);
+    free(prepared->reference_latent);
+    free(prepared->speaker_state);
+    free(prepared);
+    return -1;
+}
+
+void iro_prepared_reference_free(IroPreparedReference *reference) {
+    if (!reference || !reference->impl) return;
+    IroPreparedReferenceImpl *prepared = reference->impl;
+    free(prepared->reference_latent);
+    free(prepared->speaker_state);
+    free(prepared);
+    reference->impl = NULL;
+}
+
 void iro_engine_free(IroEngine *engine) {
     if (!engine || !engine->impl) return;
     IroEngineImpl *impl = engine->impl;
+    iro_dacvae_int8_free(impl->codec_int8);
+    free(impl->codec_int8);
+    iro_dit_int8_free(impl->dit_int8);
+    free(impl->dit_int8);
+    iro_packed_cache_free(impl->dit.packed_cache);
     iro_euler_workspace_free(&impl->sampler_workspace);
     if (impl->backbone_ready) iro_backbone_free(&impl->backbone);
     iro_tok_free(&impl->tokenizer);
@@ -491,8 +677,18 @@ void iro_engine_free(IroEngine *engine) {
 int iro_engine_generate(IroEngine *engine, const IroGenerateConfig *config,
                         IroGenerateStats *stats) {
     if (!engine || !engine->impl || !config || !config->text ||
-        !config->output_path || config->steps <= 0)
+        !config->output_path || config->steps <= 0 ||
+        (config->reference_path && config->prepared_reference))
         return -1;
+    if (config->prepared_reference) {
+        const IroPreparedReferenceImpl *prepared =
+            config->prepared_reference->impl;
+        if (!prepared || prepared->owner != (IroEngineImpl *)engine->impl) {
+            fprintf(stderr,
+                    "generate: prepared reference bukan milik engine ini\n");
+            return -1;
+        }
+    }
     if (config->reference_path &&
         !((IroEngineImpl *)engine->impl)->has_encoder) {
         fprintf(stderr, "generate: reference meminta encoder yang tidak diload\n");
@@ -509,20 +705,36 @@ int iro_engine_generate(IroEngine *engine, const IroGenerateConfig *config,
     IroGenerateRequest request = {0};
     int result = -1;
     if (prepare_conditions(impl, config, &request, stats) != 0) goto cleanup;
+    if (config->stage_observer)
+        config->stage_observer(config->stage_observer_user, "conditions");
     if (sample_latent(impl, config, &request, stats) != 0) goto cleanup;
+    if (config->stage_observer)
+        config->stage_observer(config->stage_observer_user, "sampling");
     request_release_conditions(&request);
     if (decode_output(impl, config, &request, stats) != 0) goto cleanup;
+    if (config->stage_observer)
+        config->stage_observer(config->stage_observer_user, "decode");
     result = 0;
 
 cleanup:
+    if (stats) {
+        stats->packed_cache_bytes = iro_packed_cache_bytes(impl->dit.packed_cache);
+        stats->dit_precision = impl->dit_precision;
+        stats->dit_int8_bytes = impl->dit_int8 ? impl->dit_int8->bytes : 0;
+        stats->codec_precision = impl->codec_precision;
+        stats->codec_int8_bytes = impl->codec_int8 ? impl->codec_int8->bytes : 0;
+    }
     request_free(&request);
+    if (config->stage_observer)
+        config->stage_observer(config->stage_observer_user, "cleanup");
     return result;
 }
 
 int iro_generate_text(const IroGenerateConfig *config, IroGenerateStats *stats) {
     if (!config || !config->model_path || !config->tokenizer_path ||
         !config->decoder_path || !config->text || !config->output_path ||
-        config->steps <= 0 || (config->reference_path && !config->encoder_path))
+        config->steps <= 0 || config->prepared_reference ||
+        (config->reference_path && !config->encoder_path))
         return -1;
     IroEngineConfig engine_config = {
         .model_path = config->model_path,

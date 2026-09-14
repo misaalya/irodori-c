@@ -1,0 +1,778 @@
+{
+  "model": "/home/kenobu/.cache/huggingface/hub/models--Aratako--Irodori-TTS-v4.1-Small/snapshots/2b28324dc263ed5e6638b3cf3dd94c82ead07b4b/model.safetensors",
+  "reference": "/home/kenobu/development/kana-alya/assets/voices/kana-default.wav",
+  "text": "こんにちは、色とりどりの世界へようこそ。",
+  "caption": "落ち着いた自然な女性の声で、やわらかく話す。",
+  "seed": 42,
+  "steps": [
+    8
+  ],
+  "threads": 2,
+  "repeats": 5,
+  "modes": [
+    "text-only",
+    "caption-only",
+    "clone+caption"
+  ],
+  "metric_definition": "warm endpoint text/reference to PCM16 WAV fully written",
+  "environments": {
+    "python": {
+      "IRO_NUM_THREADS": "2",
+      "OPENBLAS_NUM_THREADS": "2",
+      "OMP_NUM_THREADS": "2",
+      "MKL_NUM_THREADS": "2"
+    },
+    "c": {
+      "IRO_NUM_THREADS": "2",
+      "OPENBLAS_NUM_THREADS": "2",
+      "OMP_NUM_THREADS": "2",
+      "MKL_NUM_THREADS": "2",
+      "MKL_CBWR": "AVX2"
+    }
+  },
+  "protocol": {
+    "warmups_per_backend_per_mode_step": 1,
+    "persistent_workers": true,
+    "interleaved_python_c": true,
+    "alternating_first_backend": true,
+    "minimum_formal_repeats": 5,
+    "formal_repeat_count_met": true,
+    "cpu_affinity": [
+      0,
+      1
+    ],
+    "two_threads": true,
+    "distinct_physical_cores": true,
+    "idle_preflight": {
+      "available": true,
+      "sample_seconds": 1.0,
+      "idle_fraction": 0.9215189873417722,
+      "busy_fraction": 0.07848101265822782,
+      "loadavg": [
+        0.619140625,
+        0.72265625,
+        0.6708984375
+      ],
+      "passed": true,
+      "minimum_idle_fraction": 0.9,
+      "timeout_seconds": 30.0,
+      "waited_seconds": 2.003024765999953,
+      "attempts": [
+        {
+          "available": true,
+          "sample_seconds": 1.0,
+          "idle_fraction": 0.8147208121827412,
+          "busy_fraction": 0.18527918781725883,
+          "loadavg": [
+            0.619140625,
+            0.72265625,
+            0.6708984375
+          ],
+          "passed": false
+        },
+        {
+          "available": true,
+          "sample_seconds": 1.0,
+          "idle_fraction": 0.9215189873417722,
+          "busy_fraction": 0.07848101265822782,
+          "loadavg": [
+            0.619140625,
+            0.72265625,
+            0.6708984375
+          ],
+          "passed": true
+        }
+      ]
+    },
+    "minimum_idle_fraction": 0.9,
+    "idle_wait_seconds": 30.0,
+    "idle_preflight_pass": true,
+    "idle_checks": [
+      {
+        "available": true,
+        "sample_seconds": 1.0,
+        "idle_fraction": 0.9291139240506329,
+        "busy_fraction": 0.07088607594936713,
+        "loadavg": [
+          0.67822265625,
+          0.732421875,
+          0.6748046875
+        ],
+        "passed": true,
+        "minimum_idle_fraction": 0.9,
+        "timeout_seconds": 30.0,
+        "waited_seconds": 1.001078932999917,
+        "attempts": [
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.9291139240506329,
+            "busy_fraction": 0.07088607594936713,
+            "loadavg": [
+              0.67822265625,
+              0.732421875,
+              0.6748046875
+            ],
+            "passed": true
+          }
+        ],
+        "steps": 8,
+        "mode": "text-only"
+      },
+      {
+        "available": true,
+        "sample_seconds": 1.0,
+        "idle_fraction": 0.9215189873417722,
+        "busy_fraction": 0.07848101265822782,
+        "loadavg": [
+          2.47607421875,
+          1.80078125,
+          1.1396484375
+        ],
+        "passed": true,
+        "minimum_idle_fraction": 0.9,
+        "timeout_seconds": 30.0,
+        "waited_seconds": 1.004915991000189,
+        "attempts": [
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.9215189873417722,
+            "busy_fraction": 0.07848101265822782,
+            "loadavg": [
+              2.47607421875,
+              1.80078125,
+              1.1396484375
+            ],
+            "passed": true
+          }
+        ],
+        "steps": 8,
+        "mode": "caption-only"
+      },
+      {
+        "available": true,
+        "sample_seconds": 1.0,
+        "idle_fraction": 0.9183673469387755,
+        "busy_fraction": 0.08163265306122447,
+        "loadavg": [
+          3.7490234375,
+          2.6611328125,
+          1.6689453125
+        ],
+        "passed": true,
+        "minimum_idle_fraction": 0.9,
+        "timeout_seconds": 30.0,
+        "waited_seconds": 1.0014690600000904,
+        "attempts": [
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.9183673469387755,
+            "busy_fraction": 0.08163265306122447,
+            "loadavg": [
+              3.7490234375,
+              2.6611328125,
+              1.6689453125
+            ],
+            "passed": true
+          }
+        ],
+        "steps": 8,
+        "mode": "clone+caption"
+      }
+    ],
+    "expected_backends": {
+      "python": "pytorch",
+      "c": "torch-mkl-sgemm"
+    }
+  },
+  "step_runs": {
+    "8": {
+      "modes": {
+        "text-only": {
+          "python": {
+            "backend": "python",
+            "mode": "text-only",
+            "threads": 2,
+            "steps": 8,
+            "seed": 42,
+            "samples_seconds": [
+              23.39861712899983,
+              24.696076105999964,
+              24.285882679999986,
+              25.27765374700016,
+              25.12530122299995
+            ],
+            "p50_seconds": 24.696076105999964,
+            "p95_seconds": 25.247183242200116,
+            "best_seconds": 23.39861712899983,
+            "audio_seconds": 4.48,
+            "rtf_p50": 5.51251698794642,
+            "peak_rss_kib": 5257308,
+            "sample_count": 215040,
+            "stage_timings": {
+              "encode": 3.7839593830001377,
+              "sample": 13.37770876500008,
+              "decode": 7.486165397999912
+            },
+            "deterministic": true,
+            "wav_sha256": "475834ce942885b0110e378d79f6824a365d587dd30f5d682d2004280c17be86",
+            "wav_path": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/text-only/python-run-5.wav",
+            "noise_path": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/text-only/noise.f32"
+          },
+          "c": {
+            "backend": "c",
+            "mode": "text-only",
+            "threads": 2,
+            "steps": 8,
+            "seed": 42,
+            "samples_seconds": [
+              12.349141149,
+              12.416780471,
+              12.558140597,
+              12.628398135,
+              12.891213012
+            ],
+            "p50_seconds": 12.558140597,
+            "p95_seconds": 12.838650036599999,
+            "best_seconds": 12.349141149,
+            "audio_seconds": 4.48,
+            "rtf_p50": 2.803156383258928,
+            "peak_rss_kib": 2680204,
+            "sample_count": 215040,
+            "stage_timings": {
+              "encode": 0.113710378,
+              "sample": 7.214997651,
+              "decode": 5.215733872
+            },
+            "deterministic": true,
+            "wav_sha256": "18628002cfbd8b93890aef46c6e9e9b79062d9a281cc9b1307372caf9eb035b6",
+            "wav_path": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/text-only/c-run-5.wav",
+            "noise_path": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/text-only/noise.f32"
+          },
+          "worker_ready": {
+            "python": {
+              "backend": "pytorch",
+              "requested_threads": 2,
+              "backend_threads": 2,
+              "interop_threads": 1,
+              "MKL_CBWR": "",
+              "MKL_NUM_THREADS": "2",
+              "OPENBLAS_NUM_THREADS": "2",
+              "OMP_NUM_THREADS": "2"
+            },
+            "c": {
+              "backend": "torch-mkl-sgemm",
+              "requested_threads": 2,
+              "backend_threads": 2,
+              "MKL_CBWR": "AVX2",
+              "MKL_NUM_THREADS": "2",
+              "OPENBLAS_NUM_THREADS": "2",
+              "OMP_NUM_THREADS": "2",
+              "retain_frontend": 0,
+              "memory_profile": 0,
+              "prepared_reference": 0,
+              "prepare_seconds": 0.0,
+              "prepared_bytes": 0,
+              "packed_mib": 0,
+              "dit_precision": "fp32",
+              "init_seconds": 0.009153864,
+              "mkl_cbwr_effective": "AVX2"
+            }
+          },
+          "worker_logs": {
+            "python": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/text-only/python-worker.log",
+            "c": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/text-only/c-worker.log"
+          },
+          "pcm16_parity": {
+            "same_rate": true,
+            "same_length": true,
+            "python_samples": 215040,
+            "c_samples": 215040,
+            "max_lsb": 21,
+            "mae_lsb": 0.21904761904761905
+          },
+          "speedup_python_over_c": 1.9665392273040472,
+          "gate": {
+            "latency_ratio_c_over_python": 0.5085075273941585,
+            "latency_pass": true,
+            "rss_ratio_c_over_python": 0.5098053985043296,
+            "rss_pass": true,
+            "rtf_pass": false
+          }
+        },
+        "caption-only": {
+          "python": {
+            "backend": "python",
+            "mode": "caption-only",
+            "threads": 2,
+            "steps": 8,
+            "seed": 42,
+            "samples_seconds": [
+              28.76729168499992,
+              29.332980905000113,
+              29.635841035999874,
+              29.412756210000225,
+              29.694131466999806
+            ],
+            "p50_seconds": 29.412756210000225,
+            "p95_seconds": 29.68247338079982,
+            "best_seconds": 28.76729168499992,
+            "audio_seconds": 4.68,
+            "rtf_p50": 6.284776967948766,
+            "peak_rss_kib": 5041544,
+            "sample_count": 224640,
+            "stage_timings": {
+              "encode": 3.9886283529999673,
+              "sample": 17.14636026800008,
+              "decode": 8.345849055999679
+            },
+            "deterministic": true,
+            "wav_sha256": "de7816b771d4706c6f52836cb6312b5fd5b1de0baa429963e51c76eed7a7f714",
+            "wav_path": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/caption-only/python-run-5.wav",
+            "noise_path": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/caption-only/noise.f32"
+          },
+          "c": {
+            "backend": "c",
+            "mode": "caption-only",
+            "threads": 2,
+            "steps": 8,
+            "seed": 42,
+            "samples_seconds": [
+              16.166156258,
+              15.905824667,
+              16.325928909,
+              16.260087287,
+              16.439856447
+            ],
+            "p50_seconds": 16.260087287,
+            "p95_seconds": 16.417070939400002,
+            "best_seconds": 15.905824667,
+            "audio_seconds": 4.68,
+            "rtf_p50": 3.474377625427351,
+            "peak_rss_kib": 2751460,
+            "sample_count": 224640,
+            "stage_timings": {
+              "encode": 0.237921732,
+              "sample": 10.283178923,
+              "decode": 5.732167452
+            },
+            "deterministic": true,
+            "wav_sha256": "a294550575b832fc63d25b6f5924d02811e1834e8dc4f04f2fc6620d9dd56e94",
+            "wav_path": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/caption-only/c-run-5.wav",
+            "noise_path": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/caption-only/noise.f32"
+          },
+          "worker_ready": {
+            "python": {
+              "backend": "pytorch",
+              "requested_threads": 2,
+              "backend_threads": 2,
+              "interop_threads": 1,
+              "MKL_CBWR": "",
+              "MKL_NUM_THREADS": "2",
+              "OPENBLAS_NUM_THREADS": "2",
+              "OMP_NUM_THREADS": "2"
+            },
+            "c": {
+              "backend": "torch-mkl-sgemm",
+              "requested_threads": 2,
+              "backend_threads": 2,
+              "MKL_CBWR": "AVX2",
+              "MKL_NUM_THREADS": "2",
+              "OPENBLAS_NUM_THREADS": "2",
+              "OMP_NUM_THREADS": "2",
+              "retain_frontend": 0,
+              "memory_profile": 0,
+              "prepared_reference": 0,
+              "prepare_seconds": 0.0,
+              "prepared_bytes": 0,
+              "packed_mib": 0,
+              "dit_precision": "fp32",
+              "init_seconds": 0.008618647,
+              "mkl_cbwr_effective": "AVX2"
+            }
+          },
+          "worker_logs": {
+            "python": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/caption-only/python-worker.log",
+            "c": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/caption-only/c-worker.log"
+          },
+          "pcm16_parity": {
+            "same_rate": true,
+            "same_length": true,
+            "python_samples": 224640,
+            "c_samples": 224640,
+            "max_lsb": 6,
+            "mae_lsb": 0.053196225071225074
+          },
+          "speedup_python_over_c": 1.8088928854346207,
+          "gate": {
+            "latency_ratio_c_over_python": 0.5528243314195639,
+            "latency_pass": true,
+            "rss_ratio_c_over_python": 0.5457574108249378,
+            "rss_pass": true,
+            "rtf_pass": false
+          }
+        },
+        "clone+caption": {
+          "python": {
+            "backend": "python",
+            "mode": "clone+caption",
+            "threads": 2,
+            "steps": 8,
+            "seed": 42,
+            "samples_seconds": [
+              40.51758678200031,
+              42.44325240499984,
+              40.73179739099987,
+              41.138863762000256,
+              41.27691439499995
+            ],
+            "p50_seconds": 41.138863762000256,
+            "p95_seconds": 42.20998480299986,
+            "best_seconds": 40.51758678200031,
+            "audio_seconds": 4.64,
+            "rtf_p50": 8.866134431465573,
+            "peak_rss_kib": 5678160,
+            "sample_count": 222720,
+            "stage_timings": {
+              "encode": 12.365841931999512,
+              "sample": 20.480632316000083,
+              "decode": 8.30479633899995
+            },
+            "deterministic": true,
+            "wav_sha256": "aeb366ee8ddc971ce757e8bfadfc97b2dd5bda25d01f0c8beafcf73a553c6f5f",
+            "wav_path": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/clone+caption/python-run-5.wav",
+            "noise_path": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/clone+caption/noise.f32"
+          },
+          "c": {
+            "backend": "c",
+            "mode": "clone+caption",
+            "threads": 2,
+            "steps": 8,
+            "seed": 42,
+            "samples_seconds": [
+              24.304259609,
+              24.60959759,
+              24.625228334,
+              24.524127742,
+              24.355701182
+            ],
+            "p50_seconds": 24.524127742,
+            "p95_seconds": 24.6221021852,
+            "best_seconds": 24.304259609,
+            "audio_seconds": 4.64,
+            "rtf_p50": 5.2853723581896555,
+            "peak_rss_kib": 3209264,
+            "sample_count": 222720,
+            "stage_timings": {
+              "encode": 5.702770074,
+              "sample": 13.022438001,
+              "decode": 5.791669891
+            },
+            "deterministic": true,
+            "wav_sha256": "c1f4fcde815ed0b9c88effaa7c6e8006b3da4b10379fd2c65b2cd61cc0daeca3",
+            "wav_path": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/clone+caption/c-run-5.wav",
+            "noise_path": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/clone+caption/noise.f32"
+          },
+          "worker_ready": {
+            "python": {
+              "backend": "pytorch",
+              "requested_threads": 2,
+              "backend_threads": 2,
+              "interop_threads": 1,
+              "MKL_CBWR": "",
+              "MKL_NUM_THREADS": "2",
+              "OPENBLAS_NUM_THREADS": "2",
+              "OMP_NUM_THREADS": "2"
+            },
+            "c": {
+              "backend": "torch-mkl-sgemm",
+              "requested_threads": 2,
+              "backend_threads": 2,
+              "MKL_CBWR": "AVX2",
+              "MKL_NUM_THREADS": "2",
+              "OPENBLAS_NUM_THREADS": "2",
+              "OMP_NUM_THREADS": "2",
+              "retain_frontend": 0,
+              "memory_profile": 0,
+              "prepared_reference": 0,
+              "prepare_seconds": 0.0,
+              "prepared_bytes": 0,
+              "packed_mib": 0,
+              "dit_precision": "fp32",
+              "init_seconds": 0.011206302,
+              "mkl_cbwr_effective": "AVX2"
+            }
+          },
+          "worker_logs": {
+            "python": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/clone+caption/python-worker.log",
+            "c": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/clone+caption/c-worker.log"
+          },
+          "pcm16_parity": {
+            "same_rate": true,
+            "same_length": true,
+            "python_samples": 222720,
+            "c_samples": 222720,
+            "max_lsb": 58,
+            "mae_lsb": 0.34486799568965515
+          },
+          "speedup_python_over_c": 1.67748529916299,
+          "gate": {
+            "latency_ratio_c_over_python": 0.5961304105013422,
+            "latency_pass": true,
+            "rss_ratio_c_over_python": 0.5651943587359285,
+            "rss_pass": true,
+            "rtf_pass": false
+          }
+        }
+      }
+    }
+  },
+  "quality_gates": {
+    "text-only": {
+      "mode": "text-only",
+      "passed": true,
+      "generation_exit_code": 0,
+      "compare_exit_code": null,
+      "log": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/quality/text-only/quality.log",
+      "output": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/quality/text-only/quality.wav"
+    },
+    "caption-only": {
+      "mode": "caption-only",
+      "passed": true,
+      "generation_exit_code": 0,
+      "compare_exit_code": 0,
+      "log": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/quality/caption-only/quality.log",
+      "output": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/quality/caption-only/quality.wav"
+    },
+    "clone+caption": {
+      "mode": "clone+caption",
+      "passed": true,
+      "generation_exit_code": 0,
+      "compare_exit_code": 0,
+      "log": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/quality/clone+caption/quality.log",
+      "output": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/quality/clone+caption/quality.wav"
+    }
+  },
+  "provenance": {
+    "timestamp_local": "2026-09-14T07:56:03.251506+07:00",
+    "argv": [
+      "tools/bench_four_modes.py",
+      "--model",
+      "/home/kenobu/.cache/huggingface/hub/models--Aratako--Irodori-TTS-v4.1-Small/snapshots/2b28324dc263ed5e6638b3cf3dd94c82ead07b4b/model.safetensors",
+      "--ref",
+      "/home/kenobu/development/kana-alya/assets/voices/kana-default.wav",
+      "--binary",
+      "./irodori-mkl",
+      "--c-worker",
+      "./irodori-bench-worker-mkl",
+      "--c-backend",
+      "torch-mkl-sgemm",
+      "--c-env",
+      "MKL_CBWR=AVX2",
+      "--threads",
+      "2",
+      "--steps",
+      "8",
+      "--repeats",
+      "5",
+      "--modes",
+      "text-only,caption-only,clone+caption",
+      "--skip-caption-effect",
+      "--work-dir",
+      "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32"
+    ],
+    "cwd": "/home/kenobu/development/irodori/irodori-c",
+    "git_head": "65cdd69b2bd949169956f006f601b1981ce88978",
+    "git_status_path": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/source-status.txt",
+    "git_diff_path": "/home/kenobu/development/irodori/irodori-c/artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/source.diff",
+    "git_diff_sha256": "a862a669cdce8985c2f71fefd49269e3ebf22b506239a323b0b96b8ed280d957",
+    "compiler": [
+      "cc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+      "Copyright (C) 2021 Free Software Foundation, Inc."
+    ],
+    "uname": "Linux pop-os 7.0.11-76070011-generic #202606011647~1780583630~22.04~70ad774 SMP PREEMPT_DYNAMIC Thu J x86_64 x86_64 x86_64 GNU/Linux",
+    "cpu_model": "model name\t: Intel(R) Core(TM) i3-1005G1 CPU @ 1.20GHz",
+    "cpu_topology": "{\n   \"lscpu\": [\n      {\n         \"field\": \"Architecture:\",\n         \"data\": \"x86_64\"\n      },{\n         \"field\": \"CPU op-mode(s):\",\n         \"data\": \"32-bit, 64-bit\"\n      },{\n         \"field\": \"Address sizes:\",\n         \"data\": \"39 bits physical, 48 bits virtual\"\n      },{\n         \"field\": \"Byte Order:\",\n         \"data\": \"Little Endian\"\n      },{\n         \"field\": \"CPU(s):\",\n         \"data\": \"4\"\n      },{\n         \"field\": \"On-line CPU(s) list:\",\n         \"data\": \"0-3\"\n      },{\n         \"field\": \"Vendor ID:\",\n         \"data\": \"GenuineIntel\"\n      },{\n         \"field\": \"Model name:\",\n         \"data\": \"Intel(R) Core(TM) i3-1005G1 CPU @ 1.20GHz\"\n      },{\n         \"field\": \"CPU family:\",\n         \"data\": \"6\"\n      },{\n         \"field\": \"Model:\",\n         \"data\": \"126\"\n      },{\n         \"field\": \"Thread(s) per core:\",\n         \"data\": \"2\"\n      },{\n         \"field\": \"Core(s) per socket:\",\n         \"data\": \"2\"\n      },{\n         \"field\": \"Socket(s):\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"Stepping:\",\n         \"data\": \"5\"\n      },{\n         \"field\": \"CPU max MHz:\",\n         \"data\": \"3400.0000\"\n      },{\n         \"field\": \"CPU min MHz:\",\n         \"data\": \"400.0000\"\n      },{\n         \"field\": \"BogoMIPS:\",\n         \"data\": \"2380.80\"\n      },{\n         \"field\": \"Flags:\",\n         \"data\": \"fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid avx512f avx512dq rdseed adx smap avx512ifma clflushopt intel_pt avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves split_lock_detect dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid fsrm md_clear flush_l1d arch_capabilities\"\n      },{\n         \"field\": \"Virtualization:\",\n         \"data\": \"VT-x\"\n      },{\n         \"field\": \"L1d cache:\",\n         \"data\": \"96 KiB (2 instances)\"\n      },{\n         \"field\": \"L1i cache:\",\n         \"data\": \"64 KiB (2 instances)\"\n      },{\n         \"field\": \"L2 cache:\",\n         \"data\": \"1 MiB (2 instances)\"\n      },{\n         \"field\": \"L3 cache:\",\n         \"data\": \"4 MiB (1 instance)\"\n      },{\n         \"field\": \"NUMA node(s):\",\n         \"data\": \"1\"\n      },{\n         \"field\": \"NUMA node0 CPU(s):\",\n         \"data\": \"0-3\"\n      },{\n         \"field\": \"Vulnerability Gather data sampling:\",\n         \"data\": \"Vulnerable\"\n      },{\n         \"field\": \"Vulnerability Ghostwrite:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Indirect target selection:\",\n         \"data\": \"Mitigation; Aligned branch/return thunks\"\n      },{\n         \"field\": \"Vulnerability Itlb multihit:\",\n         \"data\": \"KVM: Mitigation: Split huge pages\"\n      },{\n         \"field\": \"Vulnerability L1tf:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Mds:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Meltdown:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Mmio stale data:\",\n         \"data\": \"Mitigation; Clear CPU buffers; SMT vulnerable\"\n      },{\n         \"field\": \"Vulnerability Old microcode:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Reg file data sampling:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Retbleed:\",\n         \"data\": \"Mitigation; Enhanced IBRS\"\n      },{\n         \"field\": \"Vulnerability Spec rstack overflow:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Spec store bypass:\",\n         \"data\": \"Mitigation; Speculative Store Bypass disabled via prctl\"\n      },{\n         \"field\": \"Vulnerability Spectre v1:\",\n         \"data\": \"Mitigation; usercopy/swapgs barriers and __user pointer sanitization\"\n      },{\n         \"field\": \"Vulnerability Spectre v2:\",\n         \"data\": \"Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS SW sequence; BHI SW loop, KVM SW loop\"\n      },{\n         \"field\": \"Vulnerability Srbds:\",\n         \"data\": \"Mitigation; Microcode\"\n      },{\n         \"field\": \"Vulnerability Tsa:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Tsx async abort:\",\n         \"data\": \"Not affected\"\n      },{\n         \"field\": \"Vulnerability Vmscape:\",\n         \"data\": \"Not affected\"\n      }\n   ]\n}",
+    "cpu_online": "0-3",
+    "cpu_affinity": [
+      0,
+      1
+    ],
+    "python_env": {
+      "IRO_NUM_THREADS": "2",
+      "OPENBLAS_NUM_THREADS": "2",
+      "OMP_NUM_THREADS": "2",
+      "MKL_NUM_THREADS": "2"
+    },
+    "c_env": {
+      "IRO_NUM_THREADS": "2",
+      "OPENBLAS_NUM_THREADS": "2",
+      "OMP_NUM_THREADS": "2",
+      "MKL_NUM_THREADS": "2",
+      "MKL_CBWR": "AVX2"
+    },
+    "files": {
+      "/home/kenobu/.cache/huggingface/hub/models--Aratako--Irodori-TTS-v4.1-Small/snapshots/2b28324dc263ed5e6638b3cf3dd94c82ead07b4b/model.safetensors": {
+        "path": "/home/kenobu/.cache/huggingface/hub/models--Aratako--Irodori-TTS-v4.1-Small/snapshots/2b28324dc263ed5e6638b3cf3dd94c82ead07b4b/model.safetensors",
+        "size": 3064295596,
+        "sha256": "c85de88c01700cb53538e706f128ebcb1b8513ad21d7d0e75f58bc82cdbf89f6"
+      },
+      "/home/kenobu/development/kana-alya/assets/voices/kana-default.wav": {
+        "path": "/home/kenobu/development/kana-alya/assets/voices/kana-default.wav",
+        "size": 419118,
+        "sha256": "5aca405192c97d657e75686672af9b21373337e11d7d2339a23b55411e57a84e"
+      },
+      "/home/kenobu/development/irodori/Irodori-TTS/.venv/bin/python": {
+        "path": "/home/kenobu/development/irodori/Irodori-TTS/.venv/bin/python",
+        "size": 5937704,
+        "sha256": "d6bca2b84e73c7775a0dd5e6a76899cfe4ee62863d7c8f88513811d1fda23f49"
+      },
+      "/home/kenobu/development/irodori/irodori-c/irodori-mkl": {
+        "path": "/home/kenobu/development/irodori/irodori-c/irodori-mkl",
+        "size": 188,
+        "sha256": "17c65fb5c72e12117013438c80dd7a9ef46f6f93b5629f9b78cdf08644ebca79"
+      },
+      "/home/kenobu/development/irodori/irodori-c/irodori-bench-worker-mkl": {
+        "path": "/home/kenobu/development/irodori/irodori-c/irodori-bench-worker-mkl",
+        "size": 201,
+        "sha256": "6157381a065b4803d5607a23834c120b9b43410f4b0d0343a15437040e4f59f4"
+      },
+      "/home/kenobu/development/irodori/irodori-c/weights/tokenizer.bin": {
+        "path": "/home/kenobu/development/irodori/irodori-c/weights/tokenizer.bin",
+        "size": 1523715,
+        "sha256": "322781ec4039b8c0935749e8c7727beac414fc3512f6d2c83f40b4b74de04a81"
+      },
+      "/home/kenobu/development/irodori/irodori-c/weights/dacvae_decoder.safetensors": {
+        "path": "/home/kenobu/development/irodori/irodori-c/weights/dacvae_decoder.safetensors",
+        "size": 261336436,
+        "sha256": "852cf92646226d8713314845aa63e74f347574ab378aaecee7c714dceea8d8f9"
+      },
+      "/home/kenobu/development/irodori/irodori-c/weights/dacvae_encoder.safetensors": {
+        "path": "/home/kenobu/development/irodori/irodori-c/weights/dacvae_encoder.safetensors",
+        "size": 109260808,
+        "sha256": "4c239f1a2147ea1648f8f7d6a8d98dcb9fd09f4b818bd553201775fa400cb328"
+      },
+      "/home/kenobu/development/irodori/irodori-c/tools/bench_four_modes.py": {
+        "path": "/home/kenobu/development/irodori/irodori-c/tools/bench_four_modes.py",
+        "size": 54499,
+        "sha256": "373bef7c7fd42916ef5eb5da5f63764e456f28b7d8e3507b85080db084d5abc4"
+      },
+      "/home/kenobu/development/irodori/irodori-c/tools/bench_python_worker.py": {
+        "path": "/home/kenobu/development/irodori/irodori-c/tools/bench_python_worker.py",
+        "size": 7480,
+        "sha256": "bfb5af0ddea26cbeeb8c7a12852b3948233f3299de2274bf1f47a8c502d9547a"
+      },
+      "/home/kenobu/development/irodori/irodori-c/tools/bench_c_worker.c": {
+        "path": "/home/kenobu/development/irodori/irodori-c/tools/bench_c_worker.c",
+        "size": 13269,
+        "sha256": "161c6cbdc721b9147371d620fd9b9add64100266bc67b024b1132c49567bcbe6"
+      }
+    },
+    "worker_ready": {
+      "steps-8/text-only": {
+        "python": {
+          "backend": "pytorch",
+          "requested_threads": 2,
+          "backend_threads": 2,
+          "interop_threads": 1,
+          "MKL_CBWR": "",
+          "MKL_NUM_THREADS": "2",
+          "OPENBLAS_NUM_THREADS": "2",
+          "OMP_NUM_THREADS": "2"
+        },
+        "c": {
+          "backend": "torch-mkl-sgemm",
+          "requested_threads": 2,
+          "backend_threads": 2,
+          "MKL_CBWR": "AVX2",
+          "MKL_NUM_THREADS": "2",
+          "OPENBLAS_NUM_THREADS": "2",
+          "OMP_NUM_THREADS": "2",
+          "retain_frontend": 0,
+          "memory_profile": 0,
+          "prepared_reference": 0,
+          "prepare_seconds": 0.0,
+          "prepared_bytes": 0,
+          "packed_mib": 0,
+          "dit_precision": "fp32",
+          "init_seconds": 0.009153864,
+          "mkl_cbwr_effective": "AVX2"
+        }
+      },
+      "steps-8/caption-only": {
+        "python": {
+          "backend": "pytorch",
+          "requested_threads": 2,
+          "backend_threads": 2,
+          "interop_threads": 1,
+          "MKL_CBWR": "",
+          "MKL_NUM_THREADS": "2",
+          "OPENBLAS_NUM_THREADS": "2",
+          "OMP_NUM_THREADS": "2"
+        },
+        "c": {
+          "backend": "torch-mkl-sgemm",
+          "requested_threads": 2,
+          "backend_threads": 2,
+          "MKL_CBWR": "AVX2",
+          "MKL_NUM_THREADS": "2",
+          "OPENBLAS_NUM_THREADS": "2",
+          "OMP_NUM_THREADS": "2",
+          "retain_frontend": 0,
+          "memory_profile": 0,
+          "prepared_reference": 0,
+          "prepare_seconds": 0.0,
+          "prepared_bytes": 0,
+          "packed_mib": 0,
+          "dit_precision": "fp32",
+          "init_seconds": 0.008618647,
+          "mkl_cbwr_effective": "AVX2"
+        }
+      },
+      "steps-8/clone+caption": {
+        "python": {
+          "backend": "pytorch",
+          "requested_threads": 2,
+          "backend_threads": 2,
+          "interop_threads": 1,
+          "MKL_CBWR": "",
+          "MKL_NUM_THREADS": "2",
+          "OPENBLAS_NUM_THREADS": "2",
+          "OMP_NUM_THREADS": "2"
+        },
+        "c": {
+          "backend": "torch-mkl-sgemm",
+          "requested_threads": 2,
+          "backend_threads": 2,
+          "MKL_CBWR": "AVX2",
+          "MKL_NUM_THREADS": "2",
+          "OPENBLAS_NUM_THREADS": "2",
+          "OMP_NUM_THREADS": "2",
+          "retain_frontend": 0,
+          "memory_profile": 0,
+          "prepared_reference": 0,
+          "prepare_seconds": 0.0,
+          "prepared_bytes": 0,
+          "packed_mib": 0,
+          "dit_precision": "fp32",
+          "init_seconds": 0.011206302,
+          "mkl_cbwr_effective": "AVX2"
+        }
+      }
+    }
+  },
+  "acceptance": {
+    "formal_protocol_met": false,
+    "deterministic": true,
+    "pcm16_shape_parity": true,
+    "caption_effect": true,
+    "caption_effect_verified": false,
+    "numeric_quality_gates": true,
+    "latency_all_modes_steps": true,
+    "rss_all_modes_steps": true,
+    "rtf_all_modes_steps": false,
+    "p3_performance_gate_pass": false
+  }
+}

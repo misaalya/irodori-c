@@ -1,0 +1,290 @@
+[
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-text8/short-full-int8.wav",
+  "text": "おはようございます。",
+  "label": "short",
+  "group": "text8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-text8/greeting-full-int8.wav",
+  "text": "こんにちは、色とりどりの世界へようこそ。",
+  "label": "greeting",
+  "group": "text8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-text8/weather-full-int8.wav",
+  "text": "今日は朝から雨が降っていて、少し肌寒いですね。",
+  "label": "weather",
+  "group": "text8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-text8/numbers-full-int8.wav",
+  "text": "会議は午後三時から、第二会議室で行います。",
+  "label": "numbers",
+  "group": "text8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-text8/long-full-int8.wav",
+  "text": "この製品は、日常のさまざまな場面で使えるように設計されており、初めての方でも簡単に操作できます。",
+  "label": "long",
+  "group": "text8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-text8/question-full-int8.wav",
+  "text": "週末はどこかへ出かける予定がありますか。",
+  "label": "question",
+  "group": "text8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-text8/short-codec-int8.wav",
+  "text": "おはようございます。",
+  "label": "short",
+  "group": "text8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-text8/greeting-codec-int8.wav",
+  "text": "こんにちは、色とりどりの世界へようこそ。",
+  "label": "greeting",
+  "group": "text8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-text8/weather-codec-int8.wav",
+  "text": "今日は朝から雨が降っていて、少し肌寒いですね。",
+  "label": "weather",
+  "group": "text8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-text8/numbers-codec-int8.wav",
+  "text": "会議は午後三時から、第二会議室で行います。",
+  "label": "numbers",
+  "group": "text8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-text8/long-codec-int8.wav",
+  "text": "この製品は、日常のさまざまな場面で使えるように設計されており、初めての方でも簡単に操作できます。",
+  "label": "long",
+  "group": "text8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-text8/question-codec-int8.wav",
+  "text": "週末はどこかへ出かける予定がありますか。",
+  "label": "question",
+  "group": "text8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-caption8/short-full-int8.wav",
+  "text": "おはようございます。",
+  "label": "short",
+  "group": "caption8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-caption8/greeting-full-int8.wav",
+  "text": "こんにちは、色とりどりの世界へようこそ。",
+  "label": "greeting",
+  "group": "caption8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-caption8/weather-full-int8.wav",
+  "text": "今日は朝から雨が降っていて、少し肌寒いですね。",
+  "label": "weather",
+  "group": "caption8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-caption8/numbers-full-int8.wav",
+  "text": "会議は午後三時から、第二会議室で行います。",
+  "label": "numbers",
+  "group": "caption8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-caption8/long-full-int8.wav",
+  "text": "この製品は、日常のさまざまな場面で使えるように設計されており、初めての方でも簡単に操作できます。",
+  "label": "long",
+  "group": "caption8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-caption8/question-full-int8.wav",
+  "text": "週末はどこかへ出かける予定がありますか。",
+  "label": "question",
+  "group": "caption8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-caption8/short-codec-int8.wav",
+  "text": "おはようございます。",
+  "label": "short",
+  "group": "caption8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-caption8/greeting-codec-int8.wav",
+  "text": "こんにちは、色とりどりの世界へようこそ。",
+  "label": "greeting",
+  "group": "caption8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-caption8/weather-codec-int8.wav",
+  "text": "今日は朝から雨が降っていて、少し肌寒いですね。",
+  "label": "weather",
+  "group": "caption8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-caption8/numbers-codec-int8.wav",
+  "text": "会議は午後三時から、第二会議室で行います。",
+  "label": "numbers",
+  "group": "caption8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-caption8/long-codec-int8.wav",
+  "text": "この製品は、日常のさまざまな場面で使えるように設計されており、初めての方でも簡単に操作できます。",
+  "label": "long",
+  "group": "caption8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-caption8/question-codec-int8.wav",
+  "text": "週末はどこかへ出かける予定がありますか。",
+  "label": "question",
+  "group": "caption8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clone8/short-full-int8.wav",
+  "text": "おはようございます。",
+  "label": "short",
+  "group": "clone8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clone8/greeting-full-int8.wav",
+  "text": "こんにちは、色とりどりの世界へようこそ。",
+  "label": "greeting",
+  "group": "clone8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clone8/weather-full-int8.wav",
+  "text": "今日は朝から雨が降っていて、少し肌寒いですね。",
+  "label": "weather",
+  "group": "clone8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clone8/numbers-full-int8.wav",
+  "text": "会議は午後三時から、第二会議室で行います。",
+  "label": "numbers",
+  "group": "clone8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clone8/long-full-int8.wav",
+  "text": "この製品は、日常のさまざまな場面で使えるように設計されており、初めての方でも簡単に操作できます。",
+  "label": "long",
+  "group": "clone8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clone8/question-full-int8.wav",
+  "text": "週末はどこかへ出かける予定がありますか。",
+  "label": "question",
+  "group": "clone8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clone8/short-codec-int8.wav",
+  "text": "おはようございます。",
+  "label": "short",
+  "group": "clone8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clone8/greeting-codec-int8.wav",
+  "text": "こんにちは、色とりどりの世界へようこそ。",
+  "label": "greeting",
+  "group": "clone8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clone8/weather-codec-int8.wav",
+  "text": "今日は朝から雨が降っていて、少し肌寒いですね。",
+  "label": "weather",
+  "group": "clone8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clone8/numbers-codec-int8.wav",
+  "text": "会議は午後三時から、第二会議室で行います。",
+  "label": "numbers",
+  "group": "clone8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clone8/long-codec-int8.wav",
+  "text": "この製品は、日常のさまざまな場面で使えるように設計されており、初めての方でも簡単に操作できます。",
+  "label": "long",
+  "group": "clone8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clone8/question-codec-int8.wav",
+  "text": "週末はどこかへ出かける予定がありますか。",
+  "label": "question",
+  "group": "clone8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clonecaption8/short-full-int8.wav",
+  "text": "おはようございます。",
+  "label": "short",
+  "group": "clonecaption8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clonecaption8/greeting-full-int8.wav",
+  "text": "こんにちは、色とりどりの世界へようこそ。",
+  "label": "greeting",
+  "group": "clonecaption8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clonecaption8/weather-full-int8.wav",
+  "text": "今日は朝から雨が降っていて、少し肌寒いですね。",
+  "label": "weather",
+  "group": "clonecaption8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clonecaption8/numbers-full-int8.wav",
+  "text": "会議は午後三時から、第二会議室で行います。",
+  "label": "numbers",
+  "group": "clonecaption8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clonecaption8/long-full-int8.wav",
+  "text": "この製品は、日常のさまざまな場面で使えるように設計されており、初めての方でも簡単に操作できます。",
+  "label": "long",
+  "group": "clonecaption8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clonecaption8/question-full-int8.wav",
+  "text": "週末はどこかへ出かける予定がありますか。",
+  "label": "question",
+  "group": "clonecaption8/full-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clonecaption8/short-codec-int8.wav",
+  "text": "おはようございます。",
+  "label": "short",
+  "group": "clonecaption8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clonecaption8/greeting-codec-int8.wav",
+  "text": "こんにちは、色とりどりの世界へようこそ。",
+  "label": "greeting",
+  "group": "clonecaption8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clonecaption8/weather-codec-int8.wav",
+  "text": "今日は朝から雨が降っていて、少し肌寒いですね。",
+  "label": "weather",
+  "group": "clonecaption8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clonecaption8/numbers-codec-int8.wav",
+  "text": "会議は午後三時から、第二会議室で行います。",
+  "label": "numbers",
+  "group": "clonecaption8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clonecaption8/long-codec-int8.wav",
+  "text": "この製品は、日常のさまざまな場面で使えるように設計されており、初めての方でも簡単に操作できます。",
+  "label": "long",
+  "group": "clonecaption8/codec-int8"
+ },
+ {
+  "wav": "artifacts/int8-codec-20260914/quality-clonecaption8/question-codec-int8.wav",
+  "text": "週末はどこかへ出かける予定がありますか。",
+  "label": "question",
+  "group": "clonecaption8/codec-int8"
+ }
+]

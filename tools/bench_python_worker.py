@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import resource
 import sys
 import time
@@ -50,8 +51,8 @@ def main() -> int:
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--ref", type=Path)
     args = parser.parse_args()
-    if args.threads <= 0 or args.steps <= 0:
-        parser.error("--threads and --steps must be positive")
+    if args.threads <= 0 or args.threads > 1024 or args.steps <= 0:
+        parser.error("--threads must be 1..1024 and --steps must be positive")
 
     torch.set_num_threads(args.threads)
     torch.set_num_interop_threads(1)
@@ -126,7 +127,17 @@ def main() -> int:
             captured_noise.numpy().tofile(noise_out)
         return result
 
-    print("__IRO_READY__", flush=True)
+    ready = {
+        "backend": "pytorch",
+        "requested_threads": args.threads,
+        "backend_threads": torch.get_num_threads(),
+        "interop_threads": torch.get_num_interop_threads(),
+        "MKL_CBWR": os.environ.get("MKL_CBWR", ""),
+        "MKL_NUM_THREADS": os.environ.get("MKL_NUM_THREADS", ""),
+        "OPENBLAS_NUM_THREADS": os.environ.get("OPENBLAS_NUM_THREADS", ""),
+        "OMP_NUM_THREADS": os.environ.get("OMP_NUM_THREADS", ""),
+    }
+    print("__IRO_READY__=" + json.dumps(ready, separators=(",", ":")), flush=True)
     with torch.inference_mode():
         for raw_line in sys.stdin:
             line = raw_line.rstrip("\r\n")
@@ -148,19 +159,22 @@ def main() -> int:
 
             begin = time.perf_counter()
             result = generate_with_optional_noise(noise_out)
-            elapsed = time.perf_counter() - begin
+            synthesize_elapsed = time.perf_counter() - begin
             audio = result.audios[0].detach().cpu().float().reshape(-1).numpy()
             output = Path(output_text)
             write_wav(output, audio, result.sample_rate)
+            elapsed = time.perf_counter() - begin
             stages = dict(result.stage_timings)
             sample_seconds = float(stages.get("sample_rf", 0.0))
             decode_seconds = float(stages.get("unpatchify_latent", 0.0)) + float(
                 stages.get("decode_latent", 0.0)
             )
-            encode_seconds = max(0.0, elapsed - sample_seconds - decode_seconds)
+            encode_seconds = max(0.0, synthesize_elapsed - sample_seconds - decode_seconds)
             payload = {
                 "kind": kind,
                 "elapsed_seconds": elapsed,
+                "synthesize_seconds": synthesize_elapsed,
+                "wav_write_seconds": max(0.0, elapsed - synthesize_elapsed),
                 "encode_seconds": encode_seconds,
                 "sample_seconds": sample_seconds,
                 "decode_seconds": decode_seconds,

@@ -1,0 +1,137 @@
+[
+  {
+    "tensor": "caption_state.f32",
+    "count": 262144,
+    "accepted_vs_standalone_max": 0.0,
+    "accepted_vs_standalone_mae": 0.0,
+    "accepted_vs_golden_max": 2.1457672119140625e-06,
+    "standalone_vs_golden_max": 2.1457672119140625e-06,
+    "standalone_minus_accepted_golden_max": 0.0
+  },
+  {
+    "tensor": "duration_log_frames.f32",
+    "count": 1,
+    "accepted_vs_standalone_max": 0.0,
+    "accepted_vs_standalone_mae": 0.0,
+    "accepted_vs_golden_max": 9.5367431640625e-07,
+    "standalone_vs_golden_max": 9.5367431640625e-07,
+    "standalone_minus_accepted_golden_max": 0.0
+  },
+  {
+    "tensor": "latent_final.f32",
+    "count": 3712,
+    "accepted_vs_standalone_max": 6.654858589172363e-05,
+    "accepted_vs_standalone_mae": 1.7334119775114232e-06,
+    "accepted_vs_golden_max": 0.0007714927196502686,
+    "standalone_vs_golden_max": 0.0008380413055419922,
+    "standalone_minus_accepted_golden_max": 6.654858589172363e-05
+  },
+  {
+    "tensor": "noise.f32",
+    "count": 3712,
+    "accepted_vs_standalone_max": 0.0,
+    "accepted_vs_standalone_mae": 0.0,
+    "accepted_vs_golden_max": 0.0,
+    "standalone_vs_golden_max": 0.0,
+    "standalone_minus_accepted_golden_max": 0.0
+  },
+  {
+    "tensor": "reference_latent.f32",
+    "count": 7008,
+    "accepted_vs_standalone_max": 0.0,
+    "accepted_vs_standalone_mae": 0.0,
+    "accepted_vs_golden_max": 3.516674041748047e-05,
+    "standalone_vs_golden_max": 3.516674041748047e-05,
+    "standalone_minus_accepted_golden_max": 0.0
+  },
+  {
+    "tensor": "speaker_state.f32",
+    "count": 42240,
+    "accepted_vs_standalone_max": 0.0,
+    "accepted_vs_standalone_mae": 0.0,
+    "accepted_vs_golden_max": 6.796419620513916e-05,
+    "standalone_vs_golden_max": 6.796419620513916e-05,
+    "standalone_minus_accepted_golden_max": 0.0
+  },
+  {
+    "tensor": "velocity_step000.f32",
+    "count": 14848,
+    "accepted_vs_standalone_max": 1.7881393432617188e-06,
+    "accepted_vs_standalone_mae": 2.0582379534062056e-07,
+    "accepted_vs_golden_max": 1.5497207641601562e-05,
+    "standalone_vs_golden_max": 1.5616416931152344e-05,
+    "standalone_minus_accepted_golden_max": 1.1920928955078125e-07
+  },
+  {
+    "tensor": "velocity_step001.f32",
+    "count": 14848,
+    "accepted_vs_standalone_max": 4.410743713378906e-06,
+    "accepted_vs_standalone_mae": 4.414798695506761e-07,
+    "accepted_vs_golden_max": 3.445148468017578e-05,
+    "standalone_vs_golden_max": 3.325939178466797e-05,
+    "standalone_minus_accepted_golden_max": -1.1920928955078125e-06
+  },
+  {
+    "tensor": "velocity_step002.f32",
+    "count": 14848,
+    "accepted_vs_standalone_max": 2.0265579223632812e-05,
+    "accepted_vs_standalone_mae": 7.866156579439121e-07,
+    "accepted_vs_golden_max": 6.222724914550781e-05,
+    "standalone_vs_golden_max": 5.9604644775390625e-05,
+    "standalone_minus_accepted_golden_max": -2.6226043701171875e-06
+  },
+  {
+    "tensor": "velocity_step003.f32",
+    "count": 14848,
+    "accepted_vs_standalone_max": 1.3172626495361328e-05,
+    "accepted_vs_standalone_mae": 1.2005883718302357e-06,
+    "accepted_vs_golden_max": 0.0002149343490600586,
+    "standalone_vs_golden_max": 0.0002224445343017578,
+    "standalone_minus_accepted_golden_max": 7.510185241699219e-06
+  },
+  {
+    "tensor": "velocity_step004.f32",
+    "count": 3712,
+    "accepted_vs_standalone_max": 3.17692756652832e-05,
+    "accepted_vs_standalone_mae": 1.9630945189419435e-06,
+    "accepted_vs_golden_max": 0.0005347132682800293,
+    "standalone_vs_golden_max": 0.0005562901496887207,
+    "standalone_minus_accepted_golden_max": 2.1576881408691406e-05
+  },
+  {
+    "tensor": "velocity_step005.f32",
+    "count": 3712,
+    "accepted_vs_standalone_max": 0.00010767579078674316,
+    "accepted_vs_standalone_mae": 5.502306066773599e-06,
+    "accepted_vs_golden_max": 0.0013567805290222168,
+    "standalone_vs_golden_max": 0.001306772232055664,
+    "standalone_minus_accepted_golden_max": -5.0008296966552734e-05
+  },
+  {
+    "tensor": "velocity_step006.f32",
+    "count": 3712,
+    "accepted_vs_standalone_max": 0.00010907649993896484,
+    "accepted_vs_standalone_mae": 3.3642984362813877e-06,
+    "accepted_vs_golden_max": 0.001408219337463379,
+    "standalone_vs_golden_max": 0.0013195276260375977,
+    "standalone_minus_accepted_golden_max": -8.869171142578125e-05
+  },
+  {
+    "tensor": "velocity_step007.f32",
+    "count": 3712,
+    "accepted_vs_standalone_max": 0.0003531724214553833,
+    "accepted_vs_standalone_mae": 3.326131036374136e-06,
+    "accepted_vs_golden_max": 0.00496906042098999,
+    "standalone_vs_golden_max": 0.0053222328424453735,
+    "standalone_minus_accepted_golden_max": 0.0003531724214553833
+  },
+  {
+    "tensor": "waveform.f32",
+    "count": 222720,
+    "accepted_vs_standalone_max": 0.00014702975749969482,
+    "accepted_vs_standalone_mae": 7.600106073368806e-07,
+    "accepted_vs_golden_max": 0.0017798542976379395,
+    "standalone_vs_golden_max": 0.0019268840551376343,
+    "standalone_minus_accepted_golden_max": 0.00014702975749969482
+  }
+]

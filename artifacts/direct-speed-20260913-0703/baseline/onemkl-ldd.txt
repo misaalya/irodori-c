@@ -1,0 +1,7 @@
+	linux-vdso.so.1 (0x000070a710399000)
+	libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x000070a710207000)
+	libmvec.so.1 => /lib/x86_64-linux-gnu/libmvec.so.1 (0x000070a71010a000)
+	libmkl_rt.so.3 => /home/kenobu/development/irodori/benchmark-results/v2-speed-20260913-003700/onemkl-runtime/lib/libmkl_rt.so.3 (0x000070a70f600000)
+	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x000070a70f200000)
+	/lib64/ld-linux-x86-64.so.2 (0x000070a71039b000)
+	libdl.so.2 => /lib/x86_64-linux-gnu/libdl.so.2 (0x000070a710103000)

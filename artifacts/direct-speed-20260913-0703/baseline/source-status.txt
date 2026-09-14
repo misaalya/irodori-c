@@ -1,0 +1,53 @@
+ M ../.gitignore
+ M Makefile
+ M PERFORMANCE.md
+ M PLAN.md
+ M README.md
+ M audio.c
+ M dacvae.c
+ M dit.c
+ M dit.h
+ M generate.c
+ M generate.h
+ M irodori.h
+ M main.c
+ M ops.c
+ M ops.h
+ M safetensors.c
+ M sampler.c
+ M sampler.h
+ M tests/test_audio.c
+ M tokenizer.c
+ M tools/bench_generate.py
+ M tools/compare_clone_golden.py
+ M tools/dump_clone_golden.py
+?? ../benchmark-results/
+?? .gitignore
+?? HANDOFF_DIRECT_SPEED.md
+?? HANDOFF_PROMPT.md
+?? OPTIMIZATION_PLAN_V2.md
+?? artifacts/
+?? tests/bench_codec_conv7.c
+?? tests/bench_fused_qkvg.c
+?? tests/bench_fused_w1_w3.c
+?? tests/bench_onemkl_packed.c
+?? tests/bench_packed_fp32.c
+?? tests/bench_vnni_linear.c
+?? tests/test_engine_reuse.c
+?? tests/test_model_io.c
+?? tests/test_packed_cache.c
+?? tests/test_prepared_reference.c
+?? tests/test_tokenizer_boundaries.c
+?? tools/bench_c_worker.c
+?? tools/bench_four_modes.py
+?? tools/bench_profile_corpus.py
+?? tools/bench_profiler_overhead.py
+?? tools/bench_python_worker.py
+?? tools/bench_speed_tradeoff.py
+?? tools/benchmark_three_scenarios.py
+?? tools/build_quality_corpus.py
+?? tools/plot_speed_tradeoff.py
+?? tools/test_bench_four_modes.py
+?? tools/test_bench_profile_corpus.py
+?? tools/test_bench_speed_tradeoff.py
+?? tools/test_quality_corpus.py

@@ -1,0 +1,53 @@
+{
+  "reference": "artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/caption-only/python-run-5.wav",
+  "rows": [
+    {
+      "reference": "artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/caption-only/python-run-5.wav",
+      "candidate": "artifacts/pyc-3scenarios-20260914/armB-python-vs-c-int8/steps-8/caption-only/python-run-5.wav",
+      "reference_samples": 224640,
+      "candidate_samples": 224640,
+      "length_ratio": 1.0,
+      "lag_samples": 0,
+      "snr_db": Infinity,
+      "corr": 1.0,
+      "lsd_db": 0.0,
+      "mcd_db": 0.0,
+      "stoi": 1.0,
+      "peak_ref": 0.85772705078125,
+      "peak_cand": 0.85772705078125,
+      "label": "python-run2"
+    },
+    {
+      "reference": "artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/caption-only/python-run-5.wav",
+      "candidate": "artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/caption-only/c-run-5.wav",
+      "reference_samples": 224640,
+      "candidate_samples": 224640,
+      "length_ratio": 1.0,
+      "lag_samples": 0,
+      "snr_db": 85.03191577694984,
+      "corr": 0.9999999984304503,
+      "lsd_db": 0.20556029677391052,
+      "mcd_db": 0.012851951643824577,
+      "stoi": 0.9999999869662756,
+      "peak_ref": 0.85772705078125,
+      "peak_cand": 0.85772705078125,
+      "label": "c-fp32"
+    },
+    {
+      "reference": "artifacts/pyc-3scenarios-20260914/armA-python-vs-c-fp32/steps-8/caption-only/python-run-5.wav",
+      "candidate": "artifacts/pyc-3scenarios-20260914/armB-python-vs-c-int8/steps-8/caption-only/c-run-5.wav",
+      "reference_samples": 224640,
+      "candidate_samples": 224640,
+      "length_ratio": 1.0,
+      "lag_samples": 0,
+      "snr_db": 1.9324526426083497,
+      "corr": 0.6787019032227583,
+      "lsd_db": 3.062005043029785,
+      "mcd_db": 10.884440422058105,
+      "stoi": 0.9182614897859649,
+      "peak_ref": 0.85772705078125,
+      "peak_cand": 0.903564453125,
+      "label": "c-int8"
+    }
+  ]
+}

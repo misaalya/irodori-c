@@ -10,10 +10,14 @@ performance claim by accident.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import hashlib
 import json
+import math
 import os
 import re
+import selectors
+import shlex
 import statistics
 import subprocess
 import sys
@@ -38,6 +42,7 @@ STAGE_RE = re.compile(
 )
 RSS_RE = re.compile(r"__IRO_MAXRSS__=(\d+)")
 WORKER_RESULT_PREFIX = "__IRO_RESULT__="
+ALL_MODES = ("text-only", "caption-only", "clone", "clone+caption")
 
 
 def percentile(values: list[float], q: float) -> float:
@@ -52,6 +57,25 @@ def parse_steps(value: str) -> list[int]:
     if not steps or any(step <= 0 for step in steps):
         raise argparse.ArgumentTypeError("--steps must contain positive integers")
     return list(dict.fromkeys(steps))
+
+
+def parse_modes(value: str) -> list[str]:
+    modes = [part.strip() for part in value.split(",") if part.strip()]
+    unknown = [mode for mode in modes if mode not in ALL_MODES]
+    if not modes or unknown:
+        raise argparse.ArgumentTypeError(
+            "--modes must be a comma-separated subset of " + ",".join(ALL_MODES)
+        )
+    return list(dict.fromkeys(modes))
+
+
+def parse_env_assignment(value: str) -> tuple[str, str]:
+    if "=" not in value:
+        raise argparse.ArgumentTypeError("environment override must be KEY=VALUE")
+    key, item = value.split("=", 1)
+    if not key or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+        raise argparse.ArgumentTypeError(f"invalid environment key: {key!r}")
+    return key, item
 
 
 def cpu_core_identity(cpu: int) -> tuple[str, str] | None:
@@ -119,6 +143,37 @@ def sample_idle_fraction(seconds: float) -> dict[str, object]:
     }
 
 
+def wait_for_idle(
+    *, sample_seconds: float, minimum_fraction: float, timeout_seconds: float
+) -> dict[str, object]:
+    """Wait for one full sample window at the requested idle threshold."""
+    begin = time.monotonic()
+    attempts: list[dict[str, object]] = []
+    while True:
+        sample = sample_idle_fraction(sample_seconds)
+        fraction = sample.get("idle_fraction")
+        passed = bool(
+            sample.get("available")
+            and isinstance(fraction, float)
+            and fraction >= minimum_fraction
+        )
+        sample["passed"] = passed
+        attempts.append(sample)
+        elapsed = time.monotonic() - begin
+        if passed or elapsed >= timeout_seconds:
+            result = dict(sample)
+            result.update(
+                {
+                    "passed": passed,
+                    "minimum_idle_fraction": minimum_fraction,
+                    "timeout_seconds": timeout_seconds,
+                    "waited_seconds": elapsed,
+                    "attempts": attempts,
+                }
+            )
+            return result
+
+
 def parse_cpus(value: str, threads: int) -> list[int] | None:
     if value == "none":
         return None
@@ -136,6 +191,116 @@ def parse_cpus(value: str, threads: int) -> list[int] | None:
     return cpus
 
 
+def worker_env(*, threads: int, backend: str, overrides: list[tuple[str, str]]) -> dict[str, str]:
+    env = os.environ.copy()
+    env["IRO_NUM_THREADS"] = str(threads)
+    env["OPENBLAS_NUM_THREADS"] = str(threads)
+    env["OMP_NUM_THREADS"] = str(threads)
+    env["MKL_NUM_THREADS"] = str(threads)
+    if backend == "python":
+        # Python is the native reference.  Do not inherit C-only compatibility
+        # forcing from the parent benchmark process.
+        env.pop("MKL_CBWR", None)
+    for key, value in overrides:
+        env[key] = value
+    return env
+
+
+def selected_env(env: dict[str, str]) -> dict[str, str]:
+    keys = (
+        "IRO_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "OPENBLAS_CORETYPE",
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "MKL_CBWR",
+    )
+    return {key: env[key] for key in keys if key in env}
+
+
+def command_output(command: list[str]) -> str:
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=C_ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"unavailable: {exc}"
+    return completed.stdout.strip()
+
+
+def file_metadata(path: Path) -> dict[str, object]:
+    return {
+        "path": str(path),
+        "size": path.stat().st_size,
+        "sha256": sha256(path),
+    }
+
+
+def write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def persist_provenance(
+    *, work_dir: Path, argv: list[str], files: list[Path], python_env: dict[str, str],
+    c_env: dict[str, str], cpus: list[int] | None,
+) -> dict[str, object]:
+    status = command_output(["git", "status", "--short", "--untracked-files=all"])
+    diff = command_output(["git", "diff", "--binary", "--", "."])
+    write_text(work_dir / "source-status.txt", status + "\n")
+    write_text(work_dir / "source.diff", diff + ("\n" if diff else ""))
+    tracked_files = {}
+    for path in files:
+        if path.is_file():
+            tracked_files[str(path)] = file_metadata(path)
+    return {
+        "timestamp_local": datetime.now().astimezone().isoformat(),
+        "argv": argv,
+        "cwd": str(C_ROOT),
+        "git_head": command_output(["git", "rev-parse", "HEAD"]),
+        "git_status_path": str(work_dir / "source-status.txt"),
+        "git_diff_path": str(work_dir / "source.diff"),
+        "git_diff_sha256": hashlib.sha256(diff.encode("utf-8")).hexdigest(),
+        "compiler": command_output(["cc", "--version"]).splitlines()[:2],
+        "uname": command_output(["uname", "-a"]),
+        "cpu_model": command_output(["sh", "-c", "grep -m1 'model name' /proc/cpuinfo"]),
+        "cpu_topology": command_output(["lscpu", "--json"]),
+        "cpu_online": command_output(["cat", "/sys/devices/system/cpu/online"]),
+        "cpu_affinity": cpus,
+        "python_env": selected_env(python_env),
+        "c_env": selected_env(c_env),
+        "files": tracked_files,
+    }
+
+
+def validate_worker_ready(
+    label: str,
+    payload: dict[str, object],
+    requested_threads: int,
+    expected_backend: str,
+) -> None:
+    if not payload:
+        raise RuntimeError(f"{label}: worker did not report readiness metadata")
+    backend = str(payload.get("backend", ""))
+    if backend != expected_backend:
+        raise RuntimeError(
+            f"{label}: backend mismatch expected={expected_backend!r} actual={backend!r}"
+        )
+    actual = int(payload.get("backend_threads", 0) or 0)
+    requested = int(payload.get("requested_threads", 0) or 0)
+    if requested != requested_threads or actual != requested_threads:
+        raise RuntimeError(
+            f"{label}: thread mismatch requested={requested_threads} "
+            f"worker_requested={requested} active={actual} backend={payload.get('backend')}"
+        )
+
+
 class PersistentWorker:
     def __init__(
         self,
@@ -144,8 +309,15 @@ class PersistentWorker:
         env: dict[str, str],
         cpus: list[int] | None,
         label: str,
+        log_path: Path,
+        timeout_seconds: float,
     ) -> None:
         self.label = label
+        self.timeout_seconds = timeout_seconds
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        self.log_path = log_path
+        self.log = log_path.open("w", encoding="utf-8")
+        self.ready_payload: dict[str, object] = {}
         preexec_fn = None
         if cpus is not None and hasattr(os, "sched_setaffinity"):
             cpu_set = set(cpus)
@@ -165,18 +337,63 @@ class PersistentWorker:
             bufsize=1,
             preexec_fn=preexec_fn,
         )
-        self._read_until("__IRO_READY__")
+        try:
+            ready_line = self._read_until("__IRO_READY__")
+            if ready_line.startswith("__IRO_READY__="):
+                self.ready_payload = json.loads(ready_line.split("=", 1)[1])
+        except Exception:
+            if self.process.poll() is None:
+                self.process.terminate()
+                try:
+                    self.process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self.process.kill()
+                    self.process.wait()
+            self._close_process_streams()
+            self.log.close()
+            raise
+
+    def _close_process_streams(self) -> None:
+        if self.process.stdin is not None and not self.process.stdin.closed:
+            self.process.stdin.close()
+        if self.process.stdout is not None and not self.process.stdout.closed:
+            self.process.stdout.close()
 
     def _read_until(self, marker: str) -> str:
         assert self.process.stdout is not None
-        while True:
-            line = self.process.stdout.readline()
-            if line == "":
-                code = self.process.poll()
-                raise RuntimeError(f"{self.label} worker exited before {marker} (code={code})")
-            stripped = line.rstrip("\r\n")
-            if stripped == marker or stripped.startswith(marker):
-                return stripped
+        selector = selectors.DefaultSelector()
+        selector.register(self.process.stdout, selectors.EVENT_READ)
+        try:
+            deadline = time.monotonic() + self.timeout_seconds
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(
+                        f"{self.label} worker timed out waiting for {marker}; log={self.log_path}"
+                    )
+                if not selector.select(timeout=remaining):
+                    raise TimeoutError(
+                        f"{self.label} worker timed out waiting for {marker}; log={self.log_path}"
+                    )
+                line = self.process.stdout.readline()
+                if line == "":
+                    code = self.process.poll()
+                    if code is None:
+                        try:
+                            code = self.process.wait(timeout=0.1)
+                        except subprocess.TimeoutExpired:
+                            code = self.process.poll()
+                    raise RuntimeError(
+                        f"{self.label} worker exited before {marker} (code={code}); "
+                        f"log={self.log_path}"
+                    )
+                self.log.write(line)
+                self.log.flush()
+                stripped = line.rstrip("\r\n")
+                if stripped == marker or stripped.startswith(marker):
+                    return stripped
+        finally:
+            selector.close()
 
     def request(self, command: str) -> dict:
         assert self.process.stdin is not None
@@ -187,11 +404,23 @@ class PersistentWorker:
 
     def close(self) -> None:
         if self.process.poll() is not None:
+            self._close_process_streams()
+            self.log.close()
             return
         assert self.process.stdin is not None
         self.process.stdin.write("QUIT\n")
         self.process.stdin.flush()
-        self.process.wait(timeout=30)
+        try:
+            self.process.wait(timeout=min(30.0, self.timeout_seconds))
+        except subprocess.TimeoutExpired:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
+        self._close_process_streams()
+        self.log.close()
 
     def __enter__(self) -> "PersistentWorker":
         return self
@@ -204,6 +433,8 @@ class PersistentWorker:
             except subprocess.TimeoutExpired:
                 self.process.kill()
                 self.process.wait()
+            self._close_process_streams()
+            self.log.close()
             return
         self.close()
 
@@ -488,6 +719,17 @@ def summarize_worker_samples(
     *, backend: str, mode: str, steps: int, threads: int, seed: int,
     samples: list[dict], hashes: list[str], output: Path, noise: Path | None,
 ) -> dict:
+    if not samples:
+        raise RuntimeError(f"{backend}/{mode}/{steps}: worker returned no samples")
+    for index, sample in enumerate(samples, start=1):
+        for key in ("elapsed_seconds", "encode_seconds", "sample_seconds", "decode_seconds"):
+            value = float(sample[key])
+            if not math.isfinite(value) or value < 0.0:
+                raise RuntimeError(
+                    f"{backend}/{mode}/{steps}: non-finite/negative {key} in sample {index}"
+                )
+        if int(sample["output_samples"]) <= 0:
+            raise RuntimeError(f"{backend}/{mode}/{steps}: empty output in sample {index}")
     elapsed = [float(sample["elapsed_seconds"]) for sample in samples]
     audio_seconds = [
         float(sample.get("audio_seconds", int(sample["output_samples"]) / 48000.0))
@@ -519,6 +761,69 @@ def summarize_worker_samples(
         "wav_path": str(output),
         "noise_path": None if noise is None else str(noise),
     }
+
+
+def persist_pair_progress(
+    directory: Path,
+    *,
+    mode: str,
+    steps: int,
+    completed_pairs: int,
+    requested_pairs: int,
+    python_samples: list[dict],
+    c_samples: list[dict],
+    python_ready: dict[str, object],
+    c_ready: dict[str, object],
+) -> dict[str, object]:
+    progress: dict[str, object] = {
+        "mode": mode,
+        "steps": steps,
+        "completed_pairs": completed_pairs,
+        "requested_pairs": requested_pairs,
+        "python_samples": python_samples,
+        "c_samples": c_samples,
+        "python_ready": python_ready,
+        "c_ready": c_ready,
+    }
+    payload = json.dumps(progress, indent=2, ensure_ascii=False) + "\n"
+    (directory / "progress.json").write_text(payload, encoding="utf-8")
+    (directory / "partial-summary.json").write_text(payload, encoding="utf-8")
+    return progress
+
+
+def formal_protocol_met(
+    *,
+    repeats: int,
+    steps: list[int],
+    modes: tuple[str, ...],
+    threads: int,
+    distinct_physical_cores: bool,
+    idle_pass: bool,
+    idle_checks: list[dict[str, object]],
+) -> bool:
+    return (
+        repeats >= 5
+        and 8 in steps
+        and 40 in steps
+        and modes == ALL_MODES
+        and threads == 2
+        and distinct_physical_cores
+        and idle_pass
+        and all(bool(check.get("passed")) for check in idle_checks)
+    )
+
+
+def record_abort(report: dict[str, object], report_path: Path, reason: str) -> None:
+    report["acceptance"] = {
+        "formal_protocol_met": False,
+        "p3_performance_gate_pass": False,
+        "aborted": True,
+        "abort_reason": reason,
+    }
+    report_path.write_text(
+        json.dumps(report, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
 
 
 def python_worker_command(
@@ -553,18 +858,13 @@ def run_interleaved_mode(
     *, python: Path, c_worker: Path, mode: str, model: Path, tokenizer: Path,
     decoder: Path, encoder: Path, reference: Path, caption: str, text: str,
     seed: int, steps: int, threads: int, repeats: int, cpus: list[int] | None,
-    directory: Path,
+    directory: Path, python_env: dict[str, str], c_env: dict[str, str],
+    worker_timeout: float, python_backend: str, c_backend: str,
 ) -> dict:
     directory.mkdir(parents=True, exist_ok=True)
     noise = directory / "noise.f32"
     py_warm = directory / "python-warm.wav"
     c_warm = directory / "c-warm.wav"
-    env = os.environ.copy()
-    env["IRO_NUM_THREADS"] = str(threads)
-    env["OPENBLAS_NUM_THREADS"] = str(threads)
-    env["OMP_NUM_THREADS"] = str(threads)
-    env["MKL_NUM_THREADS"] = str(threads)
-
     py_command = python_worker_command(
         python=python, model=model, reference=reference, caption=caption, text=text,
         seed=seed, steps=steps, threads=threads, mode=mode,
@@ -576,7 +876,17 @@ def run_interleaved_mode(
     py_last = py_warm
     c_last = c_warm
 
-    with PersistentWorker(py_command, env=env, cpus=cpus, label=f"python/{mode}/{steps}") as py:
+    with PersistentWorker(
+        py_command,
+        env=python_env,
+        cpus=cpus,
+        label=f"python/{mode}/{steps}",
+        log_path=directory / "python-worker.log",
+        timeout_seconds=worker_timeout,
+    ) as py:
+        validate_worker_ready(
+            f"python/{mode}/{steps}", py.ready_payload, threads, python_backend
+        )
         py.request(f"WARM\t{py_warm}\t{noise}")
         c_command_line = c_worker_command(
             worker=c_worker, model=model, tokenizer=tokenizer, decoder=decoder,
@@ -584,8 +894,14 @@ def run_interleaved_mode(
             seed=seed, steps=steps, mode=mode, noise=noise,
         )
         with PersistentWorker(
-            c_command_line, env=env, cpus=cpus, label=f"c/{mode}/{steps}"
+            c_command_line,
+            env=c_env,
+            cpus=cpus,
+            label=f"c/{mode}/{steps}",
+            log_path=directory / "c-worker.log",
+            timeout_seconds=worker_timeout,
         ) as c:
+            validate_worker_ready(f"c/{mode}/{steps}", c.ready_payload, threads, c_backend)
             c.request(f"WARM\t{c_warm}")
             for index in range(repeats):
                 order = ("python", "c") if index % 2 == 0 else ("c", "python")
@@ -610,6 +926,17 @@ def run_interleaved_mode(
                             f"{sample['elapsed_seconds']:.3f} s",
                             flush=True,
                         )
+                persist_pair_progress(
+                    directory,
+                    mode=mode,
+                    steps=steps,
+                    completed_pairs=index + 1,
+                    requested_pairs=repeats,
+                    python_samples=py_samples,
+                    c_samples=c_samples,
+                    python_ready=py.ready_payload,
+                    c_ready=c.ready_payload,
+                )
 
     python_metrics = summarize_worker_samples(
         backend="python", mode=mode, steps=steps, threads=threads, seed=seed,
@@ -628,6 +955,11 @@ def run_interleaved_mode(
     return {
         "python": python_metrics,
         "c": c_metrics,
+        "worker_ready": {"python": py.ready_payload, "c": c.ready_payload},
+        "worker_logs": {
+            "python": str(directory / "python-worker.log"),
+            "c": str(directory / "c-worker.log"),
+        },
         "pcm16_parity": parity,
         "speedup_python_over_c": speedup,
         "gate": {
@@ -637,6 +969,62 @@ def run_interleaved_mode(
             "rss_pass": rss_ratio is not None and rss_ratio <= 0.80,
             "rtf_pass": c_metrics["rtf_p50"] < 1.0,
         },
+    }
+
+
+def run_quality_gate(
+    *, mode: str, binary: Path, model: Path, tokenizer: Path, decoder: Path,
+    encoder: Path, reference: Path, caption: str, text: str, seed: int,
+    threads: int, c_env: dict[str, str], directory: Path,
+) -> dict[str, object]:
+    directory.mkdir(parents=True, exist_ok=True)
+    log_path = directory / "quality.log"
+    output = directory / "quality.wav"
+    if mode == "text-only":
+        command = [
+            str(binary), "--test-pipeline", str(model), str(decoder),
+            str(C_ROOT / "golden" / "seed42_steps8"), str(output),
+        ]
+    else:
+        golden = {
+            "caption-only": C_ROOT / "golden" / "caption_seed42_steps8",
+            "clone": C_ROOT / "golden" / "kana_clone_seed42_steps8",
+            "clone+caption": C_ROOT / "golden" / "kana_clone_caption_seed42_steps8",
+        }[mode]
+        noise = golden / "noise.f32"
+        dump_dir = directory / "dump"
+        command = c_command(
+            binary=binary, model=model, tokenizer=tokenizer, decoder=decoder,
+            encoder=encoder, reference=reference, caption=caption, text=text,
+            seed=seed, steps=8, mode=mode, noise=noise, output=output,
+            dump_dir=dump_dir,
+        )
+    completed = subprocess.run(
+        command, cwd=C_ROOT, env=c_env, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=900, check=False,
+    )
+    output_text = completed.stdout
+    if completed.returncode == 0 and mode != "text-only":
+        compare = subprocess.run(
+            [str(sys.executable), str(C_ROOT / "tools" / "compare_clone_golden.py"),
+             str(golden), str(dump_dir)],
+            cwd=C_ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=120, check=False,
+        )
+        output_text += "\n" + compare.stdout
+        passed = compare.returncode == 0
+        compare_code = compare.returncode
+    else:
+        passed = completed.returncode == 0
+        compare_code = None
+    write_text(log_path, output_text)
+    return {
+        "mode": mode,
+        "passed": passed,
+        "generation_exit_code": completed.returncode,
+        "compare_exit_code": compare_code,
+        "log": str(log_path),
+        "output": str(output) if output.is_file() else None,
     }
 
 
@@ -742,6 +1130,16 @@ def main() -> int:
     )
     parser.add_argument("--binary", type=Path, default=C_ROOT / "irodori-blas")
     parser.add_argument("--c-worker", type=Path, default=C_WORKER)
+    parser.add_argument(
+        "--python-backend",
+        default="pytorch",
+        help="expected backend string reported by the Python worker",
+    )
+    parser.add_argument(
+        "--c-backend",
+        default="cblas-sgemm",
+        help="expected backend string reported by the C worker",
+    )
     parser.add_argument("--tokenizer", type=Path, default=C_ROOT / "weights" / "tokenizer.bin")
     parser.add_argument(
         "--decoder", type=Path, default=C_ROOT / "weights" / "dacvae_decoder.safetensors"
@@ -762,6 +1160,19 @@ def main() -> int:
     parser.add_argument("--threads", type=int, default=2)
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument(
+        "--modes", type=parse_modes, default=list(ALL_MODES),
+        help="comma-separated subset of text-only,caption-only,clone,clone+caption",
+    )
+    parser.add_argument(
+        "--c-env", action="append", type=parse_env_assignment, default=[], metavar="KEY=VALUE",
+        help="environment override applied only to the C worker/quality runs",
+    )
+    parser.add_argument(
+        "--python-env", action="append", type=parse_env_assignment, default=[], metavar="KEY=VALUE",
+        help="environment override applied only to the Python worker",
+    )
+    parser.add_argument("--worker-timeout", type=float, default=900.0)
+    parser.add_argument(
         "--cpus",
         default="auto",
         help="CPU affinity list, 'auto' for distinct physical cores, or 'none'",
@@ -778,13 +1189,21 @@ def main() -> int:
         default=0.90,
         help="minimum aggregate CPU idle fraction required for a formal P3 run",
     )
-    parser.add_argument("--work-dir", type=Path, default=Path("/tmp/irodori-four-mode-bench"))
+    parser.add_argument(
+        "--idle-wait-seconds",
+        type=float,
+        default=30.0,
+        help="maximum time to wait for a full idle sample after prior work settles",
+    )
+    parser.add_argument("--work-dir", type=Path)
     parser.add_argument("--skip-caption-effect", action="store_true")
     args = parser.parse_args()
     if args.threads <= 0 or args.repeats <= 0:
         parser.error("--threads and --repeats must be positive")
-    if args.idle_sample_seconds <= 0:
-        parser.error("--idle-sample-seconds must be positive")
+    if args.idle_sample_seconds <= 0 or args.idle_wait_seconds < 0:
+        parser.error("--idle-sample-seconds must be positive and --idle-wait-seconds non-negative")
+    if args.worker_timeout <= 0:
+        parser.error("--worker-timeout must be positive")
     if not 0.0 <= args.min_idle_fraction <= 1.0:
         parser.error("--min-idle-fraction must be between 0 and 1")
     try:
@@ -814,16 +1233,24 @@ def main() -> int:
     tokenizer = args.tokenizer.expanduser().resolve()
     decoder = args.decoder.expanduser().resolve()
     encoder = args.encoder.expanduser().resolve()
-    work_dir = args.work_dir.expanduser().resolve()
+    if args.work_dir is None:
+        stamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
+        work_dir = (C_ROOT.parent / "benchmark-results" / f"four-mode-{stamp}").absolute()
+    else:
+        work_dir = args.work_dir.expanduser().absolute()
+    if work_dir.exists() and any(work_dir.iterdir()):
+        parser.error(f"--work-dir must be new or empty: {work_dir}")
     work_dir.mkdir(parents=True, exist_ok=True)
+    python_env = worker_env(threads=args.threads, backend="python", overrides=args.python_env)
+    c_env = worker_env(threads=args.threads, backend="c", overrides=args.c_env)
 
-    idle_preflight = sample_idle_fraction(args.idle_sample_seconds)
-    idle_fraction = idle_preflight.get("idle_fraction")
-    idle_pass = bool(
-        idle_preflight.get("available")
-        and isinstance(idle_fraction, float)
-        and idle_fraction >= args.min_idle_fraction
+    idle_preflight = wait_for_idle(
+        sample_seconds=args.idle_sample_seconds,
+        minimum_fraction=args.min_idle_fraction,
+        timeout_seconds=args.idle_wait_seconds,
     )
+    idle_fraction = idle_preflight.get("idle_fraction")
+    idle_pass = bool(idle_preflight.get("passed"))
     distinct_physical_cores = affinity_uses_distinct_physical_cores(cpus, args.threads)
     print(
         "preflight: "
@@ -833,7 +1260,7 @@ def main() -> int:
         flush=True,
     )
 
-    modes = ("text-only", "caption-only", "clone", "clone+caption")
+    modes = tuple(args.modes)
     report: dict[str, object] = {
         "model": str(model),
         "reference": str(reference),
@@ -843,6 +1270,9 @@ def main() -> int:
         "steps": args.steps,
         "threads": args.threads,
         "repeats": args.repeats,
+        "modes": list(modes),
+        "metric_definition": "warm endpoint text/reference to PCM16 WAV fully written",
+        "environments": {"python": selected_env(python_env), "c": selected_env(c_env)},
         "protocol": {
             "warmups_per_backend_per_mode_step": 1,
             "persistent_workers": True,
@@ -855,24 +1285,31 @@ def main() -> int:
             "distinct_physical_cores": distinct_physical_cores,
             "idle_preflight": idle_preflight,
             "minimum_idle_fraction": args.min_idle_fraction,
+            "idle_wait_seconds": args.idle_wait_seconds,
             "idle_preflight_pass": idle_pass,
             "idle_checks": [],
+            "expected_backends": {
+                "python": args.python_backend,
+                "c": args.c_backend,
+            },
         },
         "step_runs": {},
+        "quality_gates": {},
     }
     report_path = work_dir / "summary.json"
+    report["provenance"] = persist_provenance(
+        work_dir=work_dir,
+        argv=sys.argv,
+        files=[model, reference, python, binary, c_worker, tokenizer, decoder, encoder,
+               Path(__file__).absolute(), PY_WORKER, C_ROOT / "tools" / "bench_c_worker.c"],
+        python_env=python_env,
+        c_env=c_env,
+        cpus=cpus,
+    )
+    report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     def abort_for_idle(reason: str) -> int:
-        report["acceptance"] = {
-            "formal_protocol_met": False,
-            "p3_performance_gate_pass": False,
-            "aborted": True,
-            "abort_reason": reason,
-        }
-        report_path.write_text(
-            json.dumps(report, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
+        record_abort(report, report_path, reason)
         print(f"benchmark aborted: {reason}", file=sys.stderr, flush=True)
         print(f"summary: {report_path}", flush=True)
         return 2
@@ -890,13 +1327,13 @@ def main() -> int:
         report["step_runs"][str(steps)] = step_report
         for mode in modes:
             print(f"\n== {mode} ==", flush=True)
-            idle_check = sample_idle_fraction(args.idle_sample_seconds)
-            check_fraction = idle_check.get("idle_fraction")
-            check_pass = bool(
-                idle_check.get("available")
-                and isinstance(check_fraction, float)
-                and check_fraction >= args.min_idle_fraction
+            idle_check = wait_for_idle(
+                sample_seconds=args.idle_sample_seconds,
+                minimum_fraction=args.min_idle_fraction,
+                timeout_seconds=args.idle_wait_seconds,
             )
+            check_fraction = idle_check.get("idle_fraction")
+            check_pass = bool(idle_check.get("passed"))
             idle_check.update({"steps": steps, "mode": mode, "passed": check_pass})
             report["protocol"]["idle_checks"].append(idle_check)
             print(
@@ -911,25 +1348,29 @@ def main() -> int:
                     f"idle fraction before {steps}-step {mode} mode is {value}, "
                     f"below required {args.min_idle_fraction:.4f}"
                 )
-            mode_report = run_interleaved_mode(
-                python=python,
-                c_worker=c_worker,
-                mode=mode,
-                model=model,
-                tokenizer=tokenizer,
-                decoder=decoder,
-                encoder=encoder,
-                reference=reference,
-                caption=args.caption,
-                text=args.text,
-                seed=args.seed,
-                steps=steps,
-                threads=args.threads,
-                repeats=args.repeats,
-                cpus=cpus,
-                directory=work_dir / f"steps-{steps}" / mode,
-            )
+            try:
+                mode_report = run_interleaved_mode(
+                    python=python, c_worker=c_worker, mode=mode, model=model,
+                    tokenizer=tokenizer, decoder=decoder, encoder=encoder,
+                    reference=reference, caption=args.caption, text=args.text,
+                    seed=args.seed, steps=steps, threads=args.threads,
+                    repeats=args.repeats, cpus=cpus,
+                    directory=work_dir / f"steps-{steps}" / mode,
+                    python_env=python_env, c_env=c_env,
+                    worker_timeout=args.worker_timeout,
+                    python_backend=args.python_backend,
+                    c_backend=args.c_backend,
+                )
+            except Exception as exc:
+                record_abort(report, report_path, f"{type(exc).__name__}: {exc}")
+                raise
             step_report["modes"][mode] = mode_report
+            report["provenance"].setdefault("worker_ready", {})[
+                f"steps-{steps}/{mode}"
+            ] = mode_report.get("worker_ready", {})
+            report_path.write_text(
+                json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+            )
             python_metrics = mode_report["python"]
             c_metrics = mode_report["c"]
             parity = mode_report["pcm16_parity"]
@@ -942,7 +1383,23 @@ def main() -> int:
                 flush=True,
             )
 
-    if not args.skip_caption_effect:
+    if 8 in args.steps:
+        for mode in modes:
+            print(f"\n== numeric quality gate: {mode} ==", flush=True)
+            quality = run_quality_gate(
+                mode=mode, binary=binary, model=model, tokenizer=tokenizer,
+                decoder=decoder, encoder=encoder, reference=reference,
+                caption=args.caption, text=args.text, seed=args.seed,
+                threads=args.threads, c_env=c_env,
+                directory=work_dir / "quality" / mode,
+            )
+            report["quality_gates"][mode] = quality
+            report_path.write_text(
+                json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+            )
+            print(f"  passed={quality['passed']} log={quality['log']}", flush=True)
+
+    if not args.skip_caption_effect and "caption-only" in modes:
         print("\n== caption effect/determinism ==", flush=True)
         effect_steps = args.steps[0]
         base_caption_metrics = report["step_runs"][str(effect_steps)]["modes"]["caption-only"]
@@ -966,10 +1423,13 @@ def main() -> int:
         report["caption_effect"] = caption_check
         print(json.dumps(caption_check, indent=2), flush=True)
 
-    caption_ok = args.skip_caption_effect or bool(report.get("caption_effect", {}).get("passed"))
-    caption_verified = not args.skip_caption_effect and bool(
+    caption_required = "caption-only" in modes
+    caption_ok = (not caption_required) or args.skip_caption_effect or bool(
         report.get("caption_effect", {}).get("passed")
     )
+    caption_verified = (not caption_required) or (not args.skip_caption_effect and bool(
+        report.get("caption_effect", {}).get("passed")
+    ))
     mode_reports = [
         report["step_runs"][str(steps)]["modes"][mode]
         for steps in args.steps
@@ -985,24 +1445,30 @@ def main() -> int:
         and bool(mode_report["pcm16_parity"].get("same_length"))
         for mode_report in mode_reports
     )
-    formal_protocol = (
-        args.repeats >= 5
-        and 8 in args.steps
-        and 40 in args.steps
-        and args.threads == 2
-        and distinct_physical_cores
-        and idle_pass
-        and all(bool(check["passed"]) for check in report["protocol"]["idle_checks"])
+    formal_protocol = formal_protocol_met(
+        repeats=args.repeats,
+        steps=args.steps,
+        modes=tuple(modes),
+        threads=args.threads,
+        distinct_physical_cores=distinct_physical_cores,
+        idle_pass=idle_pass,
+        idle_checks=report["protocol"]["idle_checks"],
     )
     latency_pass = all(bool(mode_report["gate"]["latency_pass"]) for mode_report in mode_reports)
     rss_pass = all(bool(mode_report["gate"]["rss_pass"]) for mode_report in mode_reports)
     rtf_pass = all(bool(mode_report["gate"]["rtf_pass"]) for mode_report in mode_reports)
+    quality_pass = (
+        8 in args.steps
+        and set(report["quality_gates"]) == set(modes)
+        and all(bool(item["passed"]) for item in report["quality_gates"].values())
+    )
     report["acceptance"] = {
         "formal_protocol_met": formal_protocol,
         "deterministic": deterministic,
         "pcm16_shape_parity": parity_shapes,
         "caption_effect": caption_ok,
         "caption_effect_verified": caption_verified,
+        "numeric_quality_gates": quality_pass,
         "latency_all_modes_steps": latency_pass,
         "rss_all_modes_steps": rss_pass,
         "rtf_all_modes_steps": rtf_pass,
@@ -1011,6 +1477,7 @@ def main() -> int:
             and deterministic
             and parity_shapes
             and caption_verified
+            and quality_pass
             and latency_pass
             and rss_pass
             and rtf_pass
@@ -1019,7 +1486,7 @@ def main() -> int:
     report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"\nsummary: {report_path}")
     print(json.dumps(report["acceptance"], indent=2), flush=True)
-    return 0 if caption_ok and deterministic and parity_shapes else 1
+    return 0 if caption_ok and deterministic and parity_shapes and quality_pass else 1
 
 
 if __name__ == "__main__":

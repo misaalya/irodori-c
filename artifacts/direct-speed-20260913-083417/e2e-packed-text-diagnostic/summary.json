@@ -1,0 +1,1106 @@
+{
+  "status": "complete",
+  "protocol": "sequential fresh process + warm-up before each measured sample; alternating first variant",
+  "argv": [
+    "tools/bench_speed_tradeoff.py",
+    "--model",
+    "/home/kenobu/.cache/huggingface/hub/models--Aratako--Irodori-TTS-v4.1-Small/snapshots/2b28324dc263ed5e6638b3cf3dd94c82ead07b4b/model.safetensors",
+    "--worker",
+    "./irodori-bench-worker-mkl",
+    "--backend",
+    "torch-mkl-sgemm",
+    "--modes",
+    "text-only",
+    "--steps",
+    "8",
+    "--pairs",
+    "3",
+    "--experiment",
+    "packed",
+    "--packed-mib",
+    "512",
+    "--allow-busy",
+    "--idle-wait",
+    "2",
+    "--out",
+    "artifacts/direct-speed-20260913-083417/e2e-packed-text-diagnostic"
+  ],
+  "experiment": "packed",
+  "memory_profile": false,
+  "pairs": 3,
+  "cpus": [
+    0,
+    1
+  ],
+  "threads": 2,
+  "backend": "torch-mkl-sgemm",
+  "extra_ram_budget_mib": 512,
+  "numeric_quality_gate": "separate artifact required for packed; this runner never accepts drift on its own",
+  "environment": {
+    "MKL_CBWR": "",
+    "IRO_NUM_THREADS": "2",
+    "MKL_NUM_THREADS": "2",
+    "OMP_NUM_THREADS": "2",
+    "OPENBLAS_NUM_THREADS": "2"
+  },
+  "hashes": {
+    "/home/kenobu/development/irodori/irodori-c/irodori-bench-worker-mkl": "6157381a065b4803d5607a23834c120b9b43410f4b0d0343a15437040e4f59f4",
+    "/home/kenobu/development/irodori/irodori-c/irodori-bench-worker-mkl.bin": "534c071a4c1dfae8dec292a69ee878241f9a776c24cebb956732908aff5e149c",
+    "/home/kenobu/.cache/huggingface/hub/models--Aratako--Irodori-TTS-v4.1-Small/snapshots/2b28324dc263ed5e6638b3cf3dd94c82ead07b4b/model.safetensors": "c85de88c01700cb53538e706f128ebcb1b8513ad21d7d0e75f58bc82cdbf89f6",
+    "/home/kenobu/development/irodori/irodori-c/generate.c": "252cb1f70da726f9abd5e3eb375daac38bc2f2e5485a3fabb4370fe3b7e16d68",
+    "/home/kenobu/development/irodori/irodori-c/generate.h": "d0e6b11d04901a1c6b8adc80d995a1e71d91453243a27de1ff05017188be6dd6",
+    "/home/kenobu/development/irodori/irodori-c/ops.c": "4db8775aab0d2ba4773ac5f834e4fbf8c3c1f85a63c53ef3507a1471426d8cfa",
+    "/home/kenobu/development/irodori/irodori-c/ops.h": "ddf8a75d0bc4f1eb196f65e959e5d7946e495b25ed1cd4061cb89aacf6b0b41e",
+    "/home/kenobu/development/irodori/irodori-c/dit.c": "bfc25e0d4c71324ab6e19b37056b7787d6a6e071f5a1c63f4a34b124e0a97303",
+    "/home/kenobu/development/irodori/irodori-c/dit.h": "40327283c9f75bf2ab2dc5b84b45eeb062beb83277bb7905c48f04a4d4dd2209",
+    "/home/kenobu/development/irodori/irodori-c/sampler.c": "91f4869738e47d9f84c6577b2c09124371c2221895ed60726dd112a3ffce63d8",
+    "/home/kenobu/development/irodori/irodori-c/Makefile": "37d73593d96266f847e0c3616b0beabadf0ac7f7536a286e3660719d63581edd",
+    "/home/kenobu/development/irodori/irodori-c/tools/bench_speed_tradeoff.py": "bdd2ad8decebace184ae4b061344a81c08d3d26b07335832ac562c104c01bb14",
+    "/home/kenobu/development/irodori/irodori-c/tools/bench_c_worker.c": "160258ae22e23c89f286305709c8960ab6ee0cc26e99e4722a82f502cd9e1cad",
+    "/home/kenobu/development/irodori/irodori-c/weights/tokenizer.bin": "322781ec4039b8c0935749e8c7727beac414fc3512f6d2c83f40b4b74de04a81",
+    "/home/kenobu/development/irodori/irodori-c/weights/dacvae_decoder.safetensors": "852cf92646226d8713314845aa63e74f347574ab378aaecee7c714dceea8d8f9",
+    "/home/kenobu/development/irodori/irodori-c/golden/seed42_steps8/x_t_step000.f32": "6c6cbfb20d4a631ae1332b4b97cc3447b7ce6eabe741b3b0f581cb33c541a718"
+  },
+  "rows": [
+    {
+      "mode": "text-only",
+      "steps": 8,
+      "pair": 1,
+      "variant": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "0,1",
+        "/home/kenobu/development/irodori/irodori-c/irodori-bench-worker-mkl",
+        "--model",
+        "/home/kenobu/.cache/huggingface/hub/models--Aratako--Irodori-TTS-v4.1-Small/snapshots/2b28324dc263ed5e6638b3cf3dd94c82ead07b4b/model.safetensors",
+        "--tokenizer",
+        "/home/kenobu/development/irodori/irodori-c/weights/tokenizer.bin",
+        "--decoder",
+        "/home/kenobu/development/irodori/irodori-c/weights/dacvae_decoder.safetensors",
+        "--text",
+        "こんにちは、色とりどりの世界へようこそ。",
+        "--noise",
+        "/home/kenobu/development/irodori/irodori-c/golden/seed42_steps8/x_t_step000.f32",
+        "--seed",
+        "42",
+        "--steps",
+        "8",
+        "--memory-profile",
+        "0",
+        "--packed-mib",
+        "0"
+      ],
+      "ready": {
+        "backend": "torch-mkl-sgemm",
+        "requested_threads": 2,
+        "backend_threads": 2,
+        "MKL_CBWR": "AVX2",
+        "MKL_NUM_THREADS": "2",
+        "OPENBLAS_NUM_THREADS": "2",
+        "OMP_NUM_THREADS": "2",
+        "retain_frontend": 0,
+        "memory_profile": 0,
+        "prepared_reference": 0,
+        "prepare_seconds": 0.0,
+        "prepared_bytes": 0,
+        "packed_mib": 0
+      },
+      "startup_seconds": 0.46469862300000386,
+      "warm": {
+        "kind": "WARM",
+        "elapsed_seconds": 24.481361701,
+        "encode_seconds": 0.377569333,
+        "sample_seconds": 13.819938954,
+        "decode_seconds": 10.27302016,
+        "tokens": 7,
+        "latent_frames": 112,
+        "output_samples": 215040,
+        "peak_rss_kib": 1906912,
+        "minor_faults": 58468,
+        "major_faults": 0,
+        "evicted_model_bytes": 1601298604,
+        "prepared_reference_used": 0,
+        "packed_cache_bytes": 0
+      },
+      "run": {
+        "kind": "RUN",
+        "elapsed_seconds": 25.016887888,
+        "encode_seconds": 0.423587959,
+        "sample_seconds": 13.534119463,
+        "decode_seconds": 11.042811193,
+        "tokens": 7,
+        "latent_frames": 112,
+        "output_samples": 215040,
+        "peak_rss_kib": 2679020,
+        "minor_faults": 48722,
+        "major_faults": 0,
+        "evicted_model_bytes": 1601298604,
+        "prepared_reference_used": 0,
+        "packed_cache_bytes": 0
+      },
+      "idle_warm": {
+        "available": true,
+        "sample_seconds": 1.0,
+        "idle_fraction": 0.25,
+        "busy_fraction": 0.75,
+        "loadavg": [
+          7.5849609375,
+          5.14453125,
+          3.845703125
+        ],
+        "passed": false,
+        "minimum_idle_fraction": 0.9,
+        "timeout_seconds": 2.0,
+        "waited_seconds": 2.0107498610013863,
+        "attempts": [
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.3631713554987212,
+            "busy_fraction": 0.6368286445012787,
+            "loadavg": [
+              7.5849609375,
+              5.14453125,
+              3.845703125
+            ],
+            "passed": false
+          },
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.25,
+            "busy_fraction": 0.75,
+            "loadavg": [
+              7.5849609375,
+              5.14453125,
+              3.845703125
+            ],
+            "passed": false
+          }
+        ]
+      },
+      "idle_run": {
+        "available": true,
+        "sample_seconds": 1.0,
+        "idle_fraction": 0.35142118863049093,
+        "busy_fraction": 0.648578811369509,
+        "loadavg": [
+          7.69970703125,
+          5.3857421875,
+          3.9619140625
+        ],
+        "passed": false,
+        "minimum_idle_fraction": 0.9,
+        "timeout_seconds": 2.0,
+        "waited_seconds": 2.010788241001137,
+        "attempts": [
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.47244094488188976,
+            "busy_fraction": 0.5275590551181102,
+            "loadavg": [
+              7.69970703125,
+              5.3857421875,
+              3.9619140625
+            ],
+            "passed": false
+          },
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.35142118863049093,
+            "busy_fraction": 0.648578811369509,
+            "loadavg": [
+              7.69970703125,
+              5.3857421875,
+              3.9619140625
+            ],
+            "passed": false
+          }
+        ]
+      },
+      "swap_delta": {
+        "pswpin": 74,
+        "pswpout": 748
+      },
+      "wav_sha256": "18628002cfbd8b93890aef46c6e9e9b79062d9a281cc9b1307372caf9eb035b6",
+      "wav": "/home/kenobu/development/irodori/irodori-c/artifacts/direct-speed-20260913-083417/e2e-packed-text-diagnostic/text-only-s8-p1-baseline.wav",
+      "audio_seconds": 4.48
+    },
+    {
+      "mode": "text-only",
+      "steps": 8,
+      "pair": 1,
+      "variant": "candidate",
+      "command": [
+        "taskset",
+        "-c",
+        "0,1",
+        "/home/kenobu/development/irodori/irodori-c/irodori-bench-worker-mkl",
+        "--model",
+        "/home/kenobu/.cache/huggingface/hub/models--Aratako--Irodori-TTS-v4.1-Small/snapshots/2b28324dc263ed5e6638b3cf3dd94c82ead07b4b/model.safetensors",
+        "--tokenizer",
+        "/home/kenobu/development/irodori/irodori-c/weights/tokenizer.bin",
+        "--decoder",
+        "/home/kenobu/development/irodori/irodori-c/weights/dacvae_decoder.safetensors",
+        "--text",
+        "こんにちは、色とりどりの世界へようこそ。",
+        "--noise",
+        "/home/kenobu/development/irodori/irodori-c/golden/seed42_steps8/x_t_step000.f32",
+        "--seed",
+        "42",
+        "--steps",
+        "8",
+        "--memory-profile",
+        "0",
+        "--packed-mib",
+        "512"
+      ],
+      "ready": {
+        "backend": "torch-mkl-sgemm",
+        "requested_threads": 2,
+        "backend_threads": 2,
+        "MKL_CBWR": "AVX2",
+        "MKL_NUM_THREADS": "2",
+        "OPENBLAS_NUM_THREADS": "2",
+        "OMP_NUM_THREADS": "2",
+        "retain_frontend": 0,
+        "memory_profile": 0,
+        "prepared_reference": 0,
+        "prepare_seconds": 0.0,
+        "prepared_bytes": 0,
+        "packed_mib": 512
+      },
+      "startup_seconds": 0.4374099400010891,
+      "warm": {
+        "kind": "WARM",
+        "elapsed_seconds": 26.548534857,
+        "encode_seconds": 0.319261812,
+        "sample_seconds": 14.504351299,
+        "decode_seconds": 11.710934919,
+        "tokens": 7,
+        "latent_frames": 112,
+        "output_samples": 215040,
+        "peak_rss_kib": 1924232,
+        "minor_faults": 77841,
+        "major_faults": 0,
+        "evicted_model_bytes": 1601298604,
+        "prepared_reference_used": 0,
+        "packed_cache_bytes": 333091584
+      },
+      "run": {
+        "kind": "RUN",
+        "elapsed_seconds": 25.66178004,
+        "encode_seconds": 0.35724655,
+        "sample_seconds": 15.706998507,
+        "decode_seconds": 9.58680332,
+        "tokens": 7,
+        "latent_frames": 112,
+        "output_samples": 215040,
+        "peak_rss_kib": 2696400,
+        "minor_faults": 36508,
+        "major_faults": 0,
+        "evicted_model_bytes": 1601298604,
+        "prepared_reference_used": 0,
+        "packed_cache_bytes": 333091584
+      },
+      "idle_warm": {
+        "available": true,
+        "sample_seconds": 1.0,
+        "idle_fraction": 0.49343832020997375,
+        "busy_fraction": 0.5065616797900263,
+        "loadavg": [
+          7.16796875,
+          5.50244140625,
+          4.04833984375
+        ],
+        "passed": false,
+        "minimum_idle_fraction": 0.9,
+        "timeout_seconds": 2.0,
+        "waited_seconds": 2.0114901710003323,
+        "attempts": [
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.4114583333333333,
+            "busy_fraction": 0.5885416666666667,
+            "loadavg": [
+              7.7919921875,
+              5.595703125,
+              4.0703125
+            ],
+            "passed": false
+          },
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.49343832020997375,
+            "busy_fraction": 0.5065616797900263,
+            "loadavg": [
+              7.16796875,
+              5.50244140625,
+              4.04833984375
+            ],
+            "passed": false
+          }
+        ]
+      },
+      "idle_run": {
+        "available": true,
+        "sample_seconds": 1.0,
+        "idle_fraction": 0.4461538461538462,
+        "busy_fraction": 0.5538461538461539,
+        "loadavg": [
+          7.5146484375,
+          5.71923828125,
+          4.15966796875
+        ],
+        "passed": false,
+        "minimum_idle_fraction": 0.9,
+        "timeout_seconds": 2.0,
+        "waited_seconds": 2.0120889990030264,
+        "attempts": [
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.3979848866498741,
+            "busy_fraction": 0.6020151133501259,
+            "loadavg": [
+              7.5146484375,
+              5.71923828125,
+              4.15966796875
+            ],
+            "passed": false
+          },
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.4461538461538462,
+            "busy_fraction": 0.5538461538461539,
+            "loadavg": [
+              7.5146484375,
+              5.71923828125,
+              4.15966796875
+            ],
+            "passed": false
+          }
+        ]
+      },
+      "swap_delta": {
+        "pswpin": 44,
+        "pswpout": 131
+      },
+      "wav_sha256": "18628002cfbd8b93890aef46c6e9e9b79062d9a281cc9b1307372caf9eb035b6",
+      "wav": "/home/kenobu/development/irodori/irodori-c/artifacts/direct-speed-20260913-083417/e2e-packed-text-diagnostic/text-only-s8-p1-candidate.wav",
+      "audio_seconds": 4.48
+    },
+    {
+      "mode": "text-only",
+      "steps": 8,
+      "pair": 2,
+      "variant": "candidate",
+      "command": [
+        "taskset",
+        "-c",
+        "0,1",
+        "/home/kenobu/development/irodori/irodori-c/irodori-bench-worker-mkl",
+        "--model",
+        "/home/kenobu/.cache/huggingface/hub/models--Aratako--Irodori-TTS-v4.1-Small/snapshots/2b28324dc263ed5e6638b3cf3dd94c82ead07b4b/model.safetensors",
+        "--tokenizer",
+        "/home/kenobu/development/irodori/irodori-c/weights/tokenizer.bin",
+        "--decoder",
+        "/home/kenobu/development/irodori/irodori-c/weights/dacvae_decoder.safetensors",
+        "--text",
+        "こんにちは、色とりどりの世界へようこそ。",
+        "--noise",
+        "/home/kenobu/development/irodori/irodori-c/golden/seed42_steps8/x_t_step000.f32",
+        "--seed",
+        "42",
+        "--steps",
+        "8",
+        "--memory-profile",
+        "0",
+        "--packed-mib",
+        "512"
+      ],
+      "ready": {
+        "backend": "torch-mkl-sgemm",
+        "requested_threads": 2,
+        "backend_threads": 2,
+        "MKL_CBWR": "AVX2",
+        "MKL_NUM_THREADS": "2",
+        "OPENBLAS_NUM_THREADS": "2",
+        "OMP_NUM_THREADS": "2",
+        "retain_frontend": 0,
+        "memory_profile": 0,
+        "prepared_reference": 0,
+        "prepare_seconds": 0.0,
+        "prepared_bytes": 0,
+        "packed_mib": 512
+      },
+      "startup_seconds": 0.4417173179972451,
+      "warm": {
+        "kind": "WARM",
+        "elapsed_seconds": 27.378538263,
+        "encode_seconds": 0.389277754,
+        "sample_seconds": 15.023474518,
+        "decode_seconds": 11.953743991,
+        "tokens": 7,
+        "latent_frames": 112,
+        "output_samples": 215040,
+        "peak_rss_kib": 1924364,
+        "minor_faults": 107268,
+        "major_faults": 0,
+        "evicted_model_bytes": 1601298604,
+        "prepared_reference_used": 0,
+        "packed_cache_bytes": 333091584
+      },
+      "run": {
+        "kind": "RUN",
+        "elapsed_seconds": 26.297019962,
+        "encode_seconds": 0.557233524,
+        "sample_seconds": 14.041471597,
+        "decode_seconds": 11.68666309,
+        "tokens": 7,
+        "latent_frames": 112,
+        "output_samples": 215040,
+        "peak_rss_kib": 2696468,
+        "minor_faults": 29343,
+        "major_faults": 0,
+        "evicted_model_bytes": 1601298604,
+        "prepared_reference_used": 0,
+        "packed_cache_bytes": 333091584
+      },
+      "idle_warm": {
+        "available": true,
+        "sample_seconds": 1.0,
+        "idle_fraction": 0.4603174603174603,
+        "busy_fraction": 0.5396825396825398,
+        "loadavg": [
+          8.41455078125,
+          6.1005859375,
+          4.3359375
+        ],
+        "passed": false,
+        "minimum_idle_fraction": 0.9,
+        "timeout_seconds": 2.0,
+        "waited_seconds": 2.010403395001049,
+        "attempts": [
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.3660477453580902,
+            "busy_fraction": 0.6339522546419099,
+            "loadavg": [
+              8.41455078125,
+              6.1005859375,
+              4.3359375
+            ],
+            "passed": false
+          },
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.4603174603174603,
+            "busy_fraction": 0.5396825396825398,
+            "loadavg": [
+              8.41455078125,
+              6.1005859375,
+              4.3359375
+            ],
+            "passed": false
+          }
+        ]
+      },
+      "idle_run": {
+        "available": true,
+        "sample_seconds": 1.0,
+        "idle_fraction": 0.4263565891472868,
+        "busy_fraction": 0.5736434108527132,
+        "loadavg": [
+          8.5703125,
+          6.36279296875,
+          4.48046875
+        ],
+        "passed": false,
+        "minimum_idle_fraction": 0.9,
+        "timeout_seconds": 2.0,
+        "waited_seconds": 2.0123182459974487,
+        "attempts": [
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.49742268041237114,
+            "busy_fraction": 0.5025773195876289,
+            "loadavg": [
+              8.5703125,
+              6.36279296875,
+              4.48046875
+            ],
+            "passed": false
+          },
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.4263565891472868,
+            "busy_fraction": 0.5736434108527132,
+            "loadavg": [
+              8.5703125,
+              6.36279296875,
+              4.48046875
+            ],
+            "passed": false
+          }
+        ]
+      },
+      "swap_delta": {
+        "pswpin": 272,
+        "pswpout": 0
+      },
+      "wav_sha256": "18628002cfbd8b93890aef46c6e9e9b79062d9a281cc9b1307372caf9eb035b6",
+      "wav": "/home/kenobu/development/irodori/irodori-c/artifacts/direct-speed-20260913-083417/e2e-packed-text-diagnostic/text-only-s8-p2-candidate.wav",
+      "audio_seconds": 4.48
+    },
+    {
+      "mode": "text-only",
+      "steps": 8,
+      "pair": 2,
+      "variant": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "0,1",
+        "/home/kenobu/development/irodori/irodori-c/irodori-bench-worker-mkl",
+        "--model",
+        "/home/kenobu/.cache/huggingface/hub/models--Aratako--Irodori-TTS-v4.1-Small/snapshots/2b28324dc263ed5e6638b3cf3dd94c82ead07b4b/model.safetensors",
+        "--tokenizer",
+        "/home/kenobu/development/irodori/irodori-c/weights/tokenizer.bin",
+        "--decoder",
+        "/home/kenobu/development/irodori/irodori-c/weights/dacvae_decoder.safetensors",
+        "--text",
+        "こんにちは、色とりどりの世界へようこそ。",
+        "--noise",
+        "/home/kenobu/development/irodori/irodori-c/golden/seed42_steps8/x_t_step000.f32",
+        "--seed",
+        "42",
+        "--steps",
+        "8",
+        "--memory-profile",
+        "0",
+        "--packed-mib",
+        "0"
+      ],
+      "ready": {
+        "backend": "torch-mkl-sgemm",
+        "requested_threads": 2,
+        "backend_threads": 2,
+        "MKL_CBWR": "AVX2",
+        "MKL_NUM_THREADS": "2",
+        "OPENBLAS_NUM_THREADS": "2",
+        "OMP_NUM_THREADS": "2",
+        "retain_frontend": 0,
+        "memory_profile": 0,
+        "prepared_reference": 0,
+        "prepare_seconds": 0.0,
+        "prepared_bytes": 0,
+        "packed_mib": 0
+      },
+      "startup_seconds": 0.44460115199763095,
+      "warm": {
+        "kind": "WARM",
+        "elapsed_seconds": 24.625095816,
+        "encode_seconds": 0.309806815,
+        "sample_seconds": 14.166174662,
+        "decode_seconds": 10.137608921,
+        "tokens": 7,
+        "latent_frames": 112,
+        "output_samples": 215040,
+        "peak_rss_kib": 1907788,
+        "minor_faults": 55589,
+        "major_faults": 0,
+        "evicted_model_bytes": 1601298604,
+        "prepared_reference_used": 0,
+        "packed_cache_bytes": 0
+      },
+      "run": {
+        "kind": "RUN",
+        "elapsed_seconds": 25.234189098,
+        "encode_seconds": 0.357652352,
+        "sample_seconds": 14.636670348,
+        "decode_seconds": 10.225939052,
+        "tokens": 7,
+        "latent_frames": 112,
+        "output_samples": 215040,
+        "peak_rss_kib": 2679824,
+        "minor_faults": 27266,
+        "major_faults": 0,
+        "evicted_model_bytes": 1601298604,
+        "prepared_reference_used": 0,
+        "packed_cache_bytes": 0
+      },
+      "idle_warm": {
+        "available": true,
+        "sample_seconds": 1.0,
+        "idle_fraction": 0.5402597402597402,
+        "busy_fraction": 0.4597402597402598,
+        "loadavg": [
+          9.02978515625,
+          6.71923828125,
+          4.6611328125
+        ],
+        "passed": false,
+        "minimum_idle_fraction": 0.9,
+        "timeout_seconds": 2.0,
+        "waited_seconds": 2.0115271600006963,
+        "attempts": [
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.36828644501278773,
+            "busy_fraction": 0.6317135549872123,
+            "loadavg": [
+              9.72900390625,
+              6.81591796875,
+              4.68115234375
+            ],
+            "passed": false
+          },
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.5402597402597402,
+            "busy_fraction": 0.4597402597402598,
+            "loadavg": [
+              9.02978515625,
+              6.71923828125,
+              4.6611328125
+            ],
+            "passed": false
+          }
+        ]
+      },
+      "idle_run": {
+        "available": true,
+        "sample_seconds": 1.0,
+        "idle_fraction": 0.4177545691906005,
+        "busy_fraction": 0.5822454308093995,
+        "loadavg": [
+          8.96337890625,
+          6.87451171875,
+          4.767578125
+        ],
+        "passed": false,
+        "minimum_idle_fraction": 0.9,
+        "timeout_seconds": 2.0,
+        "waited_seconds": 2.0102373720001196,
+        "attempts": [
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.4418604651162791,
+            "busy_fraction": 0.5581395348837209,
+            "loadavg": [
+              8.96337890625,
+              6.87451171875,
+              4.767578125
+            ],
+            "passed": false
+          },
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.4177545691906005,
+            "busy_fraction": 0.5822454308093995,
+            "loadavg": [
+              8.96337890625,
+              6.87451171875,
+              4.767578125
+            ],
+            "passed": false
+          }
+        ]
+      },
+      "swap_delta": {
+        "pswpin": 21,
+        "pswpout": 0
+      },
+      "wav_sha256": "18628002cfbd8b93890aef46c6e9e9b79062d9a281cc9b1307372caf9eb035b6",
+      "wav": "/home/kenobu/development/irodori/irodori-c/artifacts/direct-speed-20260913-083417/e2e-packed-text-diagnostic/text-only-s8-p2-baseline.wav",
+      "audio_seconds": 4.48
+    },
+    {
+      "mode": "text-only",
+      "steps": 8,
+      "pair": 3,
+      "variant": "baseline",
+      "command": [
+        "taskset",
+        "-c",
+        "0,1",
+        "/home/kenobu/development/irodori/irodori-c/irodori-bench-worker-mkl",
+        "--model",
+        "/home/kenobu/.cache/huggingface/hub/models--Aratako--Irodori-TTS-v4.1-Small/snapshots/2b28324dc263ed5e6638b3cf3dd94c82ead07b4b/model.safetensors",
+        "--tokenizer",
+        "/home/kenobu/development/irodori/irodori-c/weights/tokenizer.bin",
+        "--decoder",
+        "/home/kenobu/development/irodori/irodori-c/weights/dacvae_decoder.safetensors",
+        "--text",
+        "こんにちは、色とりどりの世界へようこそ。",
+        "--noise",
+        "/home/kenobu/development/irodori/irodori-c/golden/seed42_steps8/x_t_step000.f32",
+        "--seed",
+        "42",
+        "--steps",
+        "8",
+        "--memory-profile",
+        "0",
+        "--packed-mib",
+        "0"
+      ],
+      "ready": {
+        "backend": "torch-mkl-sgemm",
+        "requested_threads": 2,
+        "backend_threads": 2,
+        "MKL_CBWR": "AVX2",
+        "MKL_NUM_THREADS": "2",
+        "OPENBLAS_NUM_THREADS": "2",
+        "OMP_NUM_THREADS": "2",
+        "retain_frontend": 0,
+        "memory_profile": 0,
+        "prepared_reference": 0,
+        "prepare_seconds": 0.0,
+        "prepared_bytes": 0,
+        "packed_mib": 0
+      },
+      "startup_seconds": 0.4438654619989393,
+      "warm": {
+        "kind": "WARM",
+        "elapsed_seconds": 23.339118299,
+        "encode_seconds": 0.321651389,
+        "sample_seconds": 13.31494512,
+        "decode_seconds": 9.690514735,
+        "tokens": 7,
+        "latent_frames": 112,
+        "output_samples": 215040,
+        "peak_rss_kib": 1907960,
+        "minor_faults": 55749,
+        "major_faults": 0,
+        "evicted_model_bytes": 1601298604,
+        "prepared_reference_used": 0,
+        "packed_cache_bytes": 0
+      },
+      "run": {
+        "kind": "RUN",
+        "elapsed_seconds": 25.178128939,
+        "encode_seconds": 0.355442029,
+        "sample_seconds": 14.619268221,
+        "decode_seconds": 10.189466809,
+        "tokens": 7,
+        "latent_frames": 112,
+        "output_samples": 215040,
+        "peak_rss_kib": 2680108,
+        "minor_faults": 26757,
+        "major_faults": 0,
+        "evicted_model_bytes": 1601298604,
+        "prepared_reference_used": 0,
+        "packed_cache_bytes": 0
+      },
+      "idle_warm": {
+        "available": true,
+        "sample_seconds": 1.0,
+        "idle_fraction": 0.45478036175710596,
+        "busy_fraction": 0.545219638242894,
+        "loadavg": [
+          8.3759765625,
+          6.94580078125,
+          4.8603515625
+        ],
+        "passed": false,
+        "minimum_idle_fraction": 0.9,
+        "timeout_seconds": 2.0,
+        "waited_seconds": 2.0122393499987083,
+        "attempts": [
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.4036458333333333,
+            "busy_fraction": 0.5963541666666667,
+            "loadavg": [
+              8.4091796875,
+              6.927734375,
+              4.84326171875
+            ],
+            "passed": false
+          },
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.45478036175710596,
+            "busy_fraction": 0.545219638242894,
+            "loadavg": [
+              8.3759765625,
+              6.94580078125,
+              4.8603515625
+            ],
+            "passed": false
+          }
+        ]
+      },
+      "idle_run": {
+        "available": true,
+        "sample_seconds": 1.0,
+        "idle_fraction": 0.468586387434555,
+        "busy_fraction": 0.531413612565445,
+        "loadavg": [
+          8.04248046875,
+          6.98291015625,
+          4.9287109375
+        ],
+        "passed": false,
+        "minimum_idle_fraction": 0.9,
+        "timeout_seconds": 2.0,
+        "waited_seconds": 2.009937291000824,
+        "attempts": [
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.4780361757105943,
+            "busy_fraction": 0.5219638242894057,
+            "loadavg": [
+              8.04248046875,
+              6.98291015625,
+              4.9287109375
+            ],
+            "passed": false
+          },
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.468586387434555,
+            "busy_fraction": 0.531413612565445,
+            "loadavg": [
+              8.04248046875,
+              6.98291015625,
+              4.9287109375
+            ],
+            "passed": false
+          }
+        ]
+      },
+      "swap_delta": {
+        "pswpin": 18,
+        "pswpout": 0
+      },
+      "wav_sha256": "18628002cfbd8b93890aef46c6e9e9b79062d9a281cc9b1307372caf9eb035b6",
+      "wav": "/home/kenobu/development/irodori/irodori-c/artifacts/direct-speed-20260913-083417/e2e-packed-text-diagnostic/text-only-s8-p3-baseline.wav",
+      "audio_seconds": 4.48
+    },
+    {
+      "mode": "text-only",
+      "steps": 8,
+      "pair": 3,
+      "variant": "candidate",
+      "command": [
+        "taskset",
+        "-c",
+        "0,1",
+        "/home/kenobu/development/irodori/irodori-c/irodori-bench-worker-mkl",
+        "--model",
+        "/home/kenobu/.cache/huggingface/hub/models--Aratako--Irodori-TTS-v4.1-Small/snapshots/2b28324dc263ed5e6638b3cf3dd94c82ead07b4b/model.safetensors",
+        "--tokenizer",
+        "/home/kenobu/development/irodori/irodori-c/weights/tokenizer.bin",
+        "--decoder",
+        "/home/kenobu/development/irodori/irodori-c/weights/dacvae_decoder.safetensors",
+        "--text",
+        "こんにちは、色とりどりの世界へようこそ。",
+        "--noise",
+        "/home/kenobu/development/irodori/irodori-c/golden/seed42_steps8/x_t_step000.f32",
+        "--seed",
+        "42",
+        "--steps",
+        "8",
+        "--memory-profile",
+        "0",
+        "--packed-mib",
+        "512"
+      ],
+      "ready": {
+        "backend": "torch-mkl-sgemm",
+        "requested_threads": 2,
+        "backend_threads": 2,
+        "MKL_CBWR": "AVX2",
+        "MKL_NUM_THREADS": "2",
+        "OPENBLAS_NUM_THREADS": "2",
+        "OMP_NUM_THREADS": "2",
+        "retain_frontend": 0,
+        "memory_profile": 0,
+        "prepared_reference": 0,
+        "prepare_seconds": 0.0,
+        "prepared_bytes": 0,
+        "packed_mib": 512
+      },
+      "startup_seconds": 0.40199159900294035,
+      "warm": {
+        "kind": "WARM",
+        "elapsed_seconds": 23.379061819,
+        "encode_seconds": 0.295371333,
+        "sample_seconds": 13.642975061,
+        "decode_seconds": 9.429757112,
+        "tokens": 7,
+        "latent_frames": 112,
+        "output_samples": 215040,
+        "peak_rss_kib": 1924280,
+        "minor_faults": 59203,
+        "major_faults": 0,
+        "evicted_model_bytes": 1601298604,
+        "prepared_reference_used": 0,
+        "packed_cache_bytes": 333091584
+      },
+      "run": {
+        "kind": "RUN",
+        "elapsed_seconds": 25.784954278,
+        "encode_seconds": 0.402765543,
+        "sample_seconds": 13.607419021,
+        "decode_seconds": 11.756891194,
+        "tokens": 7,
+        "latent_frames": 112,
+        "output_samples": 215040,
+        "peak_rss_kib": 2696316,
+        "minor_faults": 26780,
+        "major_faults": 0,
+        "evicted_model_bytes": 1601298604,
+        "prepared_reference_used": 0,
+        "packed_cache_bytes": 333091584
+      },
+      "idle_warm": {
+        "available": true,
+        "sample_seconds": 1.0,
+        "idle_fraction": 0.5378590078328982,
+        "busy_fraction": 0.4621409921671018,
+        "loadavg": [
+          8.54052734375,
+          7.1923828125,
+          5.0537109375
+        ],
+        "passed": false,
+        "minimum_idle_fraction": 0.9,
+        "timeout_seconds": 2.0,
+        "waited_seconds": 2.009850988000835,
+        "attempts": [
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.4524421593830334,
+            "busy_fraction": 0.5475578406169666,
+            "loadavg": [
+              8.54052734375,
+              7.1923828125,
+              5.0537109375
+            ],
+            "passed": false
+          },
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.5378590078328982,
+            "busy_fraction": 0.4621409921671018,
+            "loadavg": [
+              8.54052734375,
+              7.1923828125,
+              5.0537109375
+            ],
+            "passed": false
+          }
+        ]
+      },
+      "idle_run": {
+        "available": true,
+        "sample_seconds": 1.0,
+        "idle_fraction": 0.39896373056994816,
+        "busy_fraction": 0.6010362694300518,
+        "loadavg": [
+          7.5,
+          7.048828125,
+          5.06298828125
+        ],
+        "passed": false,
+        "minimum_idle_fraction": 0.9,
+        "timeout_seconds": 2.0,
+        "waited_seconds": 2.010629296000843,
+        "attempts": [
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.5404699738903395,
+            "busy_fraction": 0.45953002610966054,
+            "loadavg": [
+              7.5,
+              7.048828125,
+              5.06298828125
+            ],
+            "passed": false
+          },
+          {
+            "available": true,
+            "sample_seconds": 1.0,
+            "idle_fraction": 0.39896373056994816,
+            "busy_fraction": 0.6010362694300518,
+            "loadavg": [
+              7.5,
+              7.048828125,
+              5.06298828125
+            ],
+            "passed": false
+          }
+        ]
+      },
+      "swap_delta": {
+        "pswpin": 30,
+        "pswpout": 0
+      },
+      "wav_sha256": "18628002cfbd8b93890aef46c6e9e9b79062d9a281cc9b1307372caf9eb035b6",
+      "wav": "/home/kenobu/development/irodori/irodori-c/artifacts/direct-speed-20260913-083417/e2e-packed-text-diagnostic/text-only-s8-p3-candidate.wav",
+      "audio_seconds": 4.48
+    }
+  ],
+  "summary": {
+    "text-only-s8": {
+      "paired_speedups": [
+        0.974869547202307,
+        0.9595836005168714,
+        0.9764659137085323
+      ],
+      "all_candidate_faster": false,
+      "wav_exact": true,
+      "baseline": {
+        "p50_seconds": 25.178128939,
+        "p95_seconds": 25.228583082100002,
+        "peak_rss_mib": 2617.29296875,
+        "minor_faults_median": 27266,
+        "stages_seconds": {
+          "encode_seconds": 0.357652352,
+          "sample_seconds": 14.619268221,
+          "decode_seconds": 10.225939052
+        },
+        "rtf": 5.620118066741071
+      },
+      "candidate": {
+        "p50_seconds": 25.784954278,
+        "p95_seconds": 26.2458133936,
+        "peak_rss_mib": 2633.26953125,
+        "minor_faults_median": 29343,
+        "stages_seconds": {
+          "encode_seconds": 0.402765543,
+          "sample_seconds": 14.041471597,
+          "decode_seconds": 11.68666309
+        },
+        "rtf": 5.755570151339286
+      },
+      "speedup": 0.9764659137085323,
+      "clean": false,
+      "latency_candidate_gate": false
+    }
+  }
+}

@@ -24,6 +24,54 @@ enum {
     CONVTRANSPOSE_MAX_ROWS = 256,
 };
 
+/* Codec int8 policy.  IRO_CODEC_INT8_MASK selects which convolution groups
+   run through the integer path (1=initial Conv7, 2=ConvTranspose upsample,
+   4=residual Conv7, 8=residual Conv1); IRO_CODEC_INT8_RESIDUAL selects the
+   groups that add a second residual activation term (~16-bit activations for
+   twice that group's GEMM cost), restricted by IRO_CODEC_INT8_RESIDUAL_STAGES.
+   Default: residual Conv7+Conv1 in the last stage only.  On identical latents
+   plain W8A8 gives SNR 31.7 dB but log-mel distance 4.0 dB versus FP32, and
+   that distance comes almost entirely from the last 96-channel stage; the
+   stage-3 residual restores LSD to 1.4 dB for about a quarter of the Conv7
+   FLOPs, whereas SNR is bounded by the int8 weights (33.9 dB with residual
+   everywhere).  See artifacts/int8-codec-20260914/REPORT.md. */
+enum {
+    IRO_CODEC_GROUP_INITIAL = 1,
+    IRO_CODEC_GROUP_UPSAMPLE = 2,
+    IRO_CODEC_GROUP_CONV7 = 4,
+    IRO_CODEC_GROUP_CONV1 = 8,
+};
+
+static int codec_int8_mask(void) {
+    static int mask = -1;
+    if (mask < 0) {
+        const char *env = getenv("IRO_CODEC_INT8_MASK");
+        mask = env && *env ? (int)strtol(env, NULL, 0) & 15 : 15;
+    }
+    return mask;
+}
+
+static int codec_int8_residual_mask(void) {
+    static int mask = -1;
+    if (mask < 0) {
+        const char *env = getenv("IRO_CODEC_INT8_RESIDUAL");
+        mask = env && *env ? (int)strtol(env, NULL, 0) & 15
+                           : IRO_CODEC_GROUP_CONV7 | IRO_CODEC_GROUP_CONV1;
+    }
+    return mask;
+}
+
+/* Stage bitmask (bit s = decoder stage s) limiting the residual term of the
+   residual-unit convolutions; IRO_CODEC_INT8_RESIDUAL_STAGES, default all. */
+static int codec_int8_residual_stages(void) {
+    static int mask = -1;
+    if (mask < 0) {
+        const char *env = getenv("IRO_CODEC_INT8_RESIDUAL_STAGES");
+        mask = env && *env ? (int)strtol(env, NULL, 0) & 15 : 8; /* stage 3 */
+    }
+    return mask;
+}
+
 typedef struct {
     double up_bias[IRO_DACVAE_STAGES];
     double up_snake[IRO_DACVAE_STAGES];
@@ -175,6 +223,57 @@ int iro_dacvae_init(IroDACVAEDecoder *decoder, const IroSafetensors *weights) {
                   FINAL_CHANNELS, 1, 7, 1, 1, 3) != 0)
         return -1;
     return 0;
+}
+
+int iro_dacvae_int8_quantize(IroDACVAEInt8 *dst, const IroDACVAEDecoder *decoder) {
+    if (!dst || !decoder) return -1;
+    memset(dst, 0, sizeof(*dst));
+    const IroConv1d *initial = &decoder->initial;
+    if (iro_int8_weight_quantize(&dst->initial, initial->weight,
+                                 initial->out_channels,
+                                 initial->kernel * initial->in_channels) != 0)
+        goto fail;
+    dst->bytes += iro_int8_weight_bytes(&dst->initial);
+    for (int stage = 0; stage < IRO_DACVAE_STAGES; stage++) {
+        const IroDACVAEStage *src = &decoder->stage[stage];
+        IroDACVAEInt8Stage *q = &dst->stage[stage];
+        const IroConvTranspose1d *up = &src->upsample;
+        if (iro_int8_weight_quantize_transposed(&q->upsample, up->weight,
+                                                up->kernel * up->out_channels,
+                                                up->in_channels) != 0)
+            goto fail;
+        dst->bytes += iro_int8_weight_bytes(&q->upsample);
+        for (int residual = 0; residual < IRO_DACVAE_RESIDUALS; residual++) {
+            const IroDACVAEResidual *unit = &src->residual[residual];
+            IroDACVAEInt8Residual *uq = &q->residual[residual];
+            if (iro_int8_weight_quantize(&uq->conv0, unit->conv0.weight,
+                                         unit->conv0.out_channels,
+                                         unit->conv0.kernel * unit->conv0.in_channels) != 0 ||
+                iro_int8_weight_quantize(&uq->conv1, unit->conv1.weight,
+                                         unit->conv1.out_channels,
+                                         unit->conv1.kernel * unit->conv1.in_channels) != 0)
+                goto fail;
+            dst->bytes += iro_int8_weight_bytes(&uq->conv0) +
+                          iro_int8_weight_bytes(&uq->conv1);
+        }
+    }
+    return 0;
+fail:
+    iro_dacvae_int8_free(dst);
+    return -1;
+}
+
+void iro_dacvae_int8_free(IroDACVAEInt8 *q) {
+    if (!q) return;
+    iro_int8_weight_free(&q->initial);
+    for (int stage = 0; stage < IRO_DACVAE_STAGES; stage++) {
+        iro_int8_weight_free(&q->stage[stage].upsample);
+        for (int residual = 0; residual < IRO_DACVAE_RESIDUALS; residual++) {
+            iro_int8_weight_free(&q->stage[stage].residual[residual].conv0);
+            iro_int8_weight_free(&q->stage[stage].residual[residual].conv1);
+        }
+    }
+    memset(q, 0, sizeof(*q));
 }
 
 int iro_dacvae_encoder_init(IroDACVAEEncoder *encoder,
@@ -436,6 +535,158 @@ static int conv1d_forward_impl(const IroConv1d *conv, const float *input,
     return 0;
 }
 
+/* W8A8 convolution: every output row gathers its kernel*in inputs into one
+   uint8 im2col row quantized with a per-output-row scale/zero point, so the
+   integer GEMM over K = kernel*in accumulates exactly (no per-tap FP32
+   accumulation).  Padding positions are written as the zero point.  Weights
+   already use the matching [out, kernel*in] layout. */
+static int conv1d_int8_forward(const IroConv1d *conv, const IroInt8Weight *wq,
+                               const float *input, int input_length,
+                               float *output, const float *bias,
+                               const float *snake_alpha, int residual,
+                               double *snake_seconds, double *pack_seconds,
+                               double *linear_seconds) {
+    if (!conv || !wq || !input || !output) return -1;
+    int output_length = iro_conv1d_output_length(conv, input_length);
+    if (output_length <= 0) return -1;
+    const int C = conv->in_channels, N = conv->out_channels, K = conv->kernel;
+    const int inner = K * C;
+    if (wq->N != N || wq->K != inner) return -1;
+    /* Rows per block: the uint8 im2col plus int32 GEMM output stay within
+       the FP32 path's working-set budget. */
+    size_t per_row = (size_t)inner + sizeof(int32_t) * (size_t)N;
+    int rows_cap = (int)(CONV_WORK_BYTES / per_row);
+    if (rows_cap < 1) rows_cap = 1;
+    if (rows_cap > CONV1D_DIRECT_MAX_ROWS) rows_cap = CONV1D_DIRECT_MAX_ROWS;
+    if (rows_cap > output_length) rows_cap = output_length;
+    size_t activation_rows_cap =
+        (size_t)(rows_cap - 1) * conv->stride + 1u +
+        (size_t)conv->dilation * (K - 1);
+    if (activation_rows_cap > (size_t)input_length)
+        activation_rows_cap = (size_t)input_length;
+    uint8_t *columns = malloc((size_t)rows_cap * inner);
+    /* Second term: remainder of the first pass, range [-s/2, s/2], so its
+       scale is s/255 with zero point 128 and needs no extra statistics. */
+    uint8_t *columns2 = residual ? malloc((size_t)rows_cap * inner) : NULL;
+    float *scale2 = residual ? malloc(sizeof(float) * (size_t)rows_cap) : NULL;
+    int32_t *zero2 = residual ? malloc(sizeof(int32_t) * (size_t)rows_cap) : NULL;
+    float *activated = snake_alpha
+                           ? dacvae_malloc(sizeof(float) * activation_rows_cap * C)
+                           : NULL;
+    float *row_lo = malloc(sizeof(float) * activation_rows_cap);
+    float *row_hi = malloc(sizeof(float) * activation_rows_cap);
+    float *scale = malloc(sizeof(float) * (size_t)rows_cap);
+    int32_t *zero = malloc(sizeof(int32_t) * (size_t)rows_cap);
+    int32_t *work = dacvae_malloc(sizeof(int32_t) * (size_t)rows_cap * N);
+    if (!columns || (snake_alpha && !activated) || !row_lo || !row_hi ||
+        !scale || !zero || !work ||
+        (residual && (!columns2 || !scale2 || !zero2))) {
+        free(columns); free(columns2); free(scale2); free(zero2);
+        free(activated); free(row_lo); free(row_hi);
+        free(scale); free(zero); free(work);
+        return -1;
+    }
+    for (int start = 0; start < output_length; start += rows_cap) {
+        int rows = output_length - start;
+        if (rows > rows_cap) rows = rows_cap;
+        long long raw_min = (long long)start * conv->stride - conv->padding;
+        long long raw_max = (long long)(start + rows - 1) * conv->stride -
+                            conv->padding + (long long)(K - 1) * conv->dilation;
+        int valid_min = raw_min > 0 ? (int)raw_min : 0;
+        int valid_max = raw_max < input_length ? (int)raw_max : input_length - 1;
+        int activation_rows = valid_max >= valid_min ? valid_max - valid_min + 1 : 0;
+        const float *source = input + (size_t)valid_min * C;
+        double t0 = snake_seconds ? monotonic_seconds() : 0.0;
+        if (snake_alpha && activation_rows > 0) {
+            iro_snake_forward(source, activated, activation_rows, C, snake_alpha);
+            source = activated;
+        }
+        if (snake_seconds) *snake_seconds += monotonic_seconds() - t0;
+
+        t0 = pack_seconds ? monotonic_seconds() : 0.0;
+        for (int r = 0; r < activation_rows; r++) {
+            const float *row = source + (size_t)r * C;
+            float lo = 0.0f, hi = 0.0f;
+            for (int c = 0; c < C; c++) {
+                lo = row[c] < lo ? row[c] : lo;
+                hi = row[c] > hi ? row[c] : hi;
+            }
+            row_lo[r] = lo;
+            row_hi[r] = hi;
+        }
+        for (int r = 0; r < rows; r++) {
+            int output_time = start + r;
+            float lo = 0.0f, hi = 0.0f;
+            for (int tap = 0; tap < K; tap++) {
+                int input_time = output_time * conv->stride - conv->padding +
+                                 tap * conv->dilation;
+                if (input_time < valid_min || input_time > valid_max) continue;
+                int idx = input_time - valid_min;
+                lo = row_lo[idx] < lo ? row_lo[idx] : lo;
+                hi = row_hi[idx] > hi ? row_hi[idx] : hi;
+            }
+            float s = (hi - lo) / 255.0f;
+            if (!(s > 0.0f)) s = 1.0f;
+            float inv = 1.0f / s;
+            int zp = (int)nearbyintf(-lo * inv);
+            if (zp < 0) zp = 0;
+            if (zp > 255) zp = 255;
+            float zpf = (float)zp;
+            scale[r] = s;
+            zero[r] = zp;
+            const float s2 = s / 255.0f;
+            const float inv2 = 255.0f / s;
+            if (residual) { scale2[r] = s2; zero2[r] = 128; }
+            uint8_t *dst = columns + (size_t)r * inner;
+            uint8_t *dst2 = residual ? columns2 + (size_t)r * inner : NULL;
+            for (int tap = 0; tap < K; tap++) {
+                int input_time = output_time * conv->stride - conv->padding +
+                                 tap * conv->dilation;
+                uint8_t *tap_dst = dst + (size_t)tap * C;
+                if (input_time < valid_min || input_time > valid_max) {
+                    memset(tap_dst, zp, (size_t)C);
+                    if (residual) memset(dst2 + (size_t)tap * C, 128, (size_t)C);
+                    continue;
+                }
+                const float *row = source + (size_t)(input_time - valid_min) * C;
+                if (residual) {
+                    uint8_t *tap_dst2 = dst2 + (size_t)tap * C;
+                    for (int c = 0; c < C; c++) {
+                        float v = nearbyintf(row[c] * inv + zpf);
+                        v = v < 0.0f ? 0.0f : v;
+                        v = v > 255.0f ? 255.0f : v;
+                        tap_dst[c] = (uint8_t)v;
+                        float rem = row[c] - s * (v - zpf);
+                        float v2 = nearbyintf(rem * inv2 + 128.0f);
+                        v2 = v2 < 0.0f ? 0.0f : v2;
+                        v2 = v2 > 255.0f ? 255.0f : v2;
+                        tap_dst2[c] = (uint8_t)v2;
+                    }
+                } else {
+                    for (int c = 0; c < C; c++) {
+                        float v = nearbyintf(row[c] * inv + zpf);
+                        v = v < 0.0f ? 0.0f : v;
+                        v = v > 255.0f ? 255.0f : v;
+                        tap_dst[c] = (uint8_t)v;
+                    }
+                }
+            }
+        }
+        if (pack_seconds) *pack_seconds += monotonic_seconds() - t0;
+        t0 = linear_seconds ? monotonic_seconds() : 0.0;
+        iro_int8_linear_ex(columns, scale, zero, wq, bias,
+                           output + (size_t)start * N, rows, work, 0);
+        if (residual)
+            iro_int8_linear_ex(columns2, scale2, zero2, wq, NULL,
+                               output + (size_t)start * N, rows, work, 1);
+        if (linear_seconds) *linear_seconds += monotonic_seconds() - t0;
+    }
+    free(columns); free(columns2); free(scale2); free(zero2);
+    free(activated); free(row_lo); free(row_hi);
+    free(scale); free(zero); free(work);
+    return 0;
+}
+
 int iro_conv1d_forward(const IroConv1d *conv, const float *input,
                        int input_length, float *output) {
     return conv1d_forward_impl(conv, input, input_length, output, conv->bias,
@@ -443,11 +694,15 @@ int iro_conv1d_forward(const IroConv1d *conv, const float *input,
 }
 
 static int convtranspose1d_forward_impl(const IroConvTranspose1d *conv,
+                                        const IroInt8Weight *wq,
                                         const float *input, int input_length,
                                         float *output, const float *alpha,
                                         IroDACVAEOpProfile *profile,
                                         int profile_stage) {
     if (!conv || !input || !output) return -1;
+    if (wq && (wq->N != conv->kernel * conv->out_channels ||
+               wq->K != conv->in_channels))
+        return -1;
     int output_length = iro_convtranspose1d_output_length(conv, input_length);
     if (output_length <= 0) return -1;
     double t0 = profile ? monotonic_seconds() : 0.0;
@@ -463,8 +718,16 @@ static int convtranspose1d_forward_impl(const IroConvTranspose1d *conv,
                            ? dacvae_malloc(sizeof(float) * (size_t)rows_cap *
                                            conv->in_channels)
                            : NULL;
-    if (!expanded || (alpha && !activated)) {
+    uint8_t *q = wq ? malloc((size_t)rows_cap * conv->in_channels) : NULL;
+    float *q_scale = wq ? malloc(sizeof(float) * (size_t)rows_cap) : NULL;
+    int32_t *q_zero = wq ? malloc(sizeof(int32_t) * (size_t)rows_cap) : NULL;
+    int32_t *q_work = wq ? dacvae_malloc(sizeof(int32_t) * (size_t)rows_cap *
+                                         expanded_columns)
+                         : NULL;
+    if (!expanded || (alpha && !activated) ||
+        (wq && (!q || !q_scale || !q_zero || !q_work))) {
         free(expanded); free(activated);
+        free(q); free(q_scale); free(q_zero); free(q_work);
         return -1;
     }
 
@@ -482,8 +745,33 @@ static int convtranspose1d_forward_impl(const IroConvTranspose1d *conv,
             projection_input = activated;
         }
         t0 = profile ? monotonic_seconds() : 0.0;
-        iro_matmul(projection_input, conv->weight,
-                   expanded, rows, conv->in_channels, (int)expanded_columns);
+        if (wq && (codec_int8_residual_mask() & IRO_CODEC_GROUP_UPSAMPLE)) {
+            float *rem = dacvae_malloc(sizeof(float) * (size_t)rows * conv->in_channels);
+            uint8_t *q2 = malloc((size_t)rows * conv->in_channels);
+            float *s2 = malloc(sizeof(float) * (size_t)rows);
+            int32_t *z2 = malloc(sizeof(int32_t) * (size_t)rows);
+            if (!rem || !q2 || !s2 || !z2) {
+                free(rem); free(q2); free(s2); free(z2);
+                free(expanded); free(activated);
+                free(q); free(q_scale); free(q_zero); free(q_work);
+                return -1;
+            }
+            iro_int8_quantize_rows_residual(projection_input, rows,
+                                            conv->in_channels, q, q_scale,
+                                            q_zero, rem, q2, s2, z2);
+            iro_int8_linear_ex(q, q_scale, q_zero, wq, NULL, expanded, rows,
+                               q_work, 0);
+            iro_int8_linear_ex(q2, s2, z2, wq, NULL, expanded, rows, q_work, 1);
+            free(rem); free(q2); free(s2); free(z2);
+        } else if (wq) {
+            iro_int8_quantize_rows(projection_input, rows, conv->in_channels,
+                                   q, q_scale, q_zero);
+            iro_int8_linear_ex(q, q_scale, q_zero, wq, NULL, expanded, rows,
+                               q_work, 0);
+        } else {
+            iro_matmul(projection_input, conv->weight,
+                       expanded, rows, conv->in_channels, (int)expanded_columns);
+        }
         if (profile) profile->up_gemm[profile_stage] += monotonic_seconds() - t0;
         t0 = profile ? monotonic_seconds() : 0.0;
         for (int row = 0; row < rows; row++) {
@@ -502,25 +790,68 @@ static int convtranspose1d_forward_impl(const IroConvTranspose1d *conv,
             profile->up_scatter[profile_stage] += monotonic_seconds() - t0;
     }
     free(expanded); free(activated);
+    free(q); free(q_scale); free(q_zero); free(q_work);
     return 0;
 }
 
 int iro_convtranspose1d_forward(const IroConvTranspose1d *conv,
                                 const float *input, int input_length,
                                 float *output) {
-    return convtranspose1d_forward_impl(conv, input, input_length,
+    return convtranspose1d_forward_impl(conv, NULL, input, input_length,
                                         output, NULL, NULL, 0);
+}
+
+/* Snake: x + sin(a*x)^2 / a.  The per-channel reciprocal is hoisted and the
+   row kernels take restrict pointers so the compiler emits libmvec sinf
+   (16-wide with AVX-512) instead of one scalar call per element; in-place
+   callers go through the copy-free variant. */
+enum { SNAKE_MAX_CHANNELS = 1536 };
+
+static void snake_row(const float *restrict x, float *restrict y,
+                      const float *restrict alpha,
+                      const float *restrict inv_alpha, int channels) {
+    for (int c = 0; c < channels; c++) {
+        float sine = sinf(alpha[c] * x[c]);
+        y[c] = x[c] + sine * sine * inv_alpha[c];
+    }
+}
+
+static void snake_row_inplace(float *restrict x, const float *restrict alpha,
+                              const float *restrict inv_alpha, int channels) {
+    for (int c = 0; c < channels; c++) {
+        float sine = sinf(alpha[c] * x[c]);
+        x[c] = x[c] + sine * sine * inv_alpha[c];
+    }
+}
+
+static void snake_inv_alpha(const float *alpha, float *inv_alpha, int channels) {
+    for (int c = 0; c < channels; c++) inv_alpha[c] = 1.0f / (alpha[c] + 1e-9f);
 }
 
 void iro_snake_forward(const float *input, float *output, int frames,
                        int channels, const float *alpha) {
-    for (int time = 0; time < frames; time++) {
-        for (int channel = 0; channel < channels; channel++) {
-            size_t index = (size_t)time * channels + channel;
-            float a = alpha[channel];
-            float sine = sinf(a * input[index]);
-            output[index] = input[index] + sine * sine / (a + 1e-9f);
+    float inv_alpha[SNAKE_MAX_CHANNELS];
+    if (channels > SNAKE_MAX_CHANNELS) {
+        for (int time = 0; time < frames; time++) {
+            for (int channel = 0; channel < channels; channel++) {
+                size_t index = (size_t)time * channels + channel;
+                float a = alpha[channel];
+                float sine = sinf(a * input[index]);
+                output[index] = input[index] + sine * sine / (a + 1e-9f);
+            }
         }
+        return;
+    }
+    snake_inv_alpha(alpha, inv_alpha, channels);
+    if (input == output) {
+        for (int time = 0; time < frames; time++)
+            snake_row_inplace(output + (size_t)time * channels, alpha,
+                              inv_alpha, channels);
+    } else {
+        for (int time = 0; time < frames; time++)
+            snake_row(input + (size_t)time * channels,
+                      output + (size_t)time * channels, alpha, inv_alpha,
+                      channels);
     }
 }
 
@@ -568,18 +899,122 @@ static float *run_conv(const IroConv1d *conv, const float *input,
                              conv->bias, NULL, NULL);
 }
 
+static void snake_bias_row_inplace(float *restrict x, const float *restrict bias,
+                                   const float *restrict alpha,
+                                   const float *restrict inv_alpha, int channels) {
+    for (int c = 0; c < channels; c++) {
+        float v = x[c] + bias[c];
+        float sine = sinf(alpha[c] * v);
+        x[c] = v + sine * sine * inv_alpha[c];
+    }
+}
+
 static void snake_bias_forward(const float *input, float *output, int frames,
                                int channels, const float *bias,
                                const float *alpha) {
-    for (int time = 0; time < frames; time++) {
-        for (int channel = 0; channel < channels; channel++) {
-            size_t index = (size_t)time * channels + channel;
-            float x = input[index] + bias[channel];
-            float a = alpha[channel];
-            float sine = sinf(a * x);
-            output[index] = x + sine * sine / (a + 1e-9f);
+    float inv_alpha[SNAKE_MAX_CHANNELS];
+    if (channels > SNAKE_MAX_CHANNELS || input != output) {
+        for (int time = 0; time < frames; time++) {
+            for (int channel = 0; channel < channels; channel++) {
+                size_t index = (size_t)time * channels + channel;
+                float x = input[index] + bias[channel];
+                float a = alpha[channel];
+                float sine = sinf(a * x);
+                output[index] = x + sine * sine / (a + 1e-9f);
+            }
+        }
+        return;
+    }
+    snake_inv_alpha(alpha, inv_alpha, channels);
+    for (int time = 0; time < frames; time++)
+        snake_bias_row_inplace(output + (size_t)time * channels, bias, alpha,
+                               inv_alpha, channels);
+}
+
+static float *run_residual_int8(const IroDACVAEResidual *residual,
+                                const IroDACVAEInt8Residual *q,
+                                const float *input, int frames, int channels,
+                                IroDACVAEOpProfile *profile,
+                                int profile_stage, int profile_residual) {
+    size_t n = (size_t)frames * channels;
+    const IroConv1d *projection = &residual->conv1;
+    if (projection->kernel != 1 || projection->stride != 1 ||
+        projection->dilation != 1 || projection->padding != 0 ||
+        projection->in_channels != channels ||
+        projection->out_channels != channels ||
+        iro_conv1d_output_length(&residual->conv0, frames) != frames)
+        return NULL;
+    double *snake0 = profile ? &profile->residual_snake0[profile_stage][profile_residual] : NULL;
+    double *pack = profile ? &profile->residual_conv7_pack[profile_stage][profile_residual] : NULL;
+    double *linear = profile ? &profile->residual_conv7_linear[profile_stage][profile_residual] : NULL;
+    float *hidden = dacvae_malloc(sizeof(float) * n);
+    float *output = dacvae_malloc(sizeof(float) * n);
+    int conv7_int8 = (codec_int8_mask() & IRO_CODEC_GROUP_CONV7) != 0;
+    int conv1_int8 = (codec_int8_mask() & IRO_CODEC_GROUP_CONV1) != 0;
+    int ok0 = hidden && output &&
+              (conv7_int8
+                   ? conv1d_int8_forward(&residual->conv0, &q->conv0, input, frames,
+                                         hidden, NULL, residual->alpha0,
+                                         (codec_int8_residual_mask() & IRO_CODEC_GROUP_CONV7) != 0 &&
+                                             (codec_int8_residual_stages() >> profile_stage & 1),
+                                         snake0, pack, linear)
+                   : conv1d_forward_impl(&residual->conv0, input, frames, hidden,
+                                         NULL, residual->alpha0, snake0, pack,
+                                         linear)) == 0;
+    if (!ok0) {
+        free(hidden); free(output);
+        return NULL;
+    }
+    double t0 = profile ? monotonic_seconds() : 0.0;
+    snake_bias_forward(hidden, hidden, frames, channels,
+                       residual->conv0.bias, residual->alpha1);
+    if (profile)
+        profile->residual_snake1[profile_stage][profile_residual] += monotonic_seconds() - t0;
+    /* Skip connection first, then accumulate the int8 1x1 projection + bias. */
+    t0 = profile ? monotonic_seconds() : 0.0;
+    int ok = 1;
+    if (!conv1_int8) {
+        iro_linear_add(hidden, projection->weight, projection->bias, input,
+                       output, frames, channels, channels);
+        free(hidden);
+        if (profile)
+            profile->residual_conv1[profile_stage][profile_residual] += monotonic_seconds() - t0;
+        return output;
+    }
+    memcpy(output, input, sizeof(float) * n);
+    int residual2 = (codec_int8_residual_mask() & IRO_CODEC_GROUP_CONV1) != 0 &&
+                    (codec_int8_residual_stages() >> profile_stage & 1);
+    int rows_cap = frames < CONV1D_DIRECT_MAX_ROWS ? frames : CONV1D_DIRECT_MAX_ROWS;
+    uint8_t *qrows = malloc((size_t)rows_cap * channels);
+    float *scale = malloc(sizeof(float) * (size_t)rows_cap);
+    int32_t *zero = malloc(sizeof(int32_t) * (size_t)rows_cap);
+    int32_t *work = dacvae_malloc(sizeof(int32_t) * (size_t)rows_cap * channels);
+    float *rem = residual2 ? dacvae_malloc(sizeof(float) * (size_t)rows_cap * channels) : NULL;
+    uint8_t *qrows2 = residual2 ? malloc((size_t)rows_cap * channels) : NULL;
+    float *scale2 = residual2 ? malloc(sizeof(float) * (size_t)rows_cap) : NULL;
+    int32_t *zero2 = residual2 ? malloc(sizeof(int32_t) * (size_t)rows_cap) : NULL;
+    ok = qrows && scale && zero && work && (!residual2 || (rem && qrows2 && scale2 && zero2));
+    for (int start = 0; ok && start < frames; start += rows_cap) {
+        int rows = frames - start;
+        if (rows > rows_cap) rows = rows_cap;
+        const float *src = hidden + (size_t)start * channels;
+        float *dst = output + (size_t)start * channels;
+        if (residual2) {
+            iro_int8_quantize_rows_residual(src, rows, channels, qrows, scale, zero,
+                                            rem, qrows2, scale2, zero2);
+            iro_int8_linear_ex(qrows, scale, zero, &q->conv1, projection->bias, dst, rows, work, 1);
+            iro_int8_linear_ex(qrows2, scale2, zero2, &q->conv1, NULL, dst, rows, work, 1);
+        } else {
+            iro_int8_quantize_rows(src, rows, channels, qrows, scale, zero);
+            iro_int8_linear_ex(qrows, scale, zero, &q->conv1, projection->bias, dst, rows, work, 1);
         }
     }
+    free(qrows); free(scale); free(zero); free(work); free(hidden);
+    free(rem); free(qrows2); free(scale2); free(zero2);
+    if (profile)
+        profile->residual_conv1[profile_stage][profile_residual] += monotonic_seconds() - t0;
+    if (!ok) { free(output); return NULL; }
+    return output;
 }
 
 static float *run_residual(const IroDACVAEResidual *residual,
@@ -781,7 +1216,24 @@ int iro_dacvae_decode(const IroDACVAEDecoder *decoder, const float *latent,
     if (!state || emit_trace(trace, trace_user, "codec_quantizer_out",
                              state, frames, LATENT_DIM) != 0)
         goto fail;
-    float *next = run_conv(&decoder->initial, state, frames, &frames);
+    const IroDACVAEInt8 *int8 = decoder->int8;
+    float *next;
+    if (int8 && (codec_int8_mask() & IRO_CODEC_GROUP_INITIAL)) {
+        int initial_frames = iro_conv1d_output_length(&decoder->initial, frames);
+        next = initial_frames > 0
+                   ? dacvae_malloc(sizeof(float) * (size_t)initial_frames * DECODER_DIM)
+                   : NULL;
+        if (next && conv1d_int8_forward(&decoder->initial, &int8->initial, state,
+                                        frames, next, decoder->initial.bias, NULL,
+                                        (codec_int8_residual_mask() & IRO_CODEC_GROUP_INITIAL) != 0,
+                                        NULL, NULL, NULL) != 0) {
+            free(next);
+            next = NULL;
+        }
+        frames = initial_frames;
+    } else {
+        next = run_conv(&decoder->initial, state, frames, &frames);
+    }
     free(state);
     state = next;
     if (!state || emit_trace(trace, trace_user, "codec_decoder_initial",
@@ -803,8 +1255,10 @@ int iro_dacvae_decode(const IroDACVAEDecoder *decoder, const float *latent,
         }
         next = dacvae_malloc(sizeof(float) * (size_t)output_frames *
                              output_channels);
-        if (!next || convtranspose1d_forward_impl(&block->upsample, state,
-                                                  frames, next,
+        if (!next || convtranspose1d_forward_impl(&block->upsample,
+                                                  int8 && (codec_int8_mask() & IRO_CODEC_GROUP_UPSAMPLE)
+                                                      ? &int8->stage[stage].upsample : NULL,
+                                                  state, frames, next,
                                                   block->alpha, profile,
                                                   stage) != 0) {
             free(next);
@@ -814,9 +1268,13 @@ int iro_dacvae_decode(const IroDACVAEDecoder *decoder, const float *latent,
         state = next;
         frames = output_frames;
         for (int residual = 0; residual < IRO_DACVAE_RESIDUALS; residual++) {
-            next = run_residual(&block->residual[residual], state,
-                                frames, output_channels, profile,
-                                stage, residual);
+            next = int8 ? run_residual_int8(&block->residual[residual],
+                                            &int8->stage[stage].residual[residual],
+                                            state, frames, output_channels,
+                                            profile, stage, residual)
+                        : run_residual(&block->residual[residual], state,
+                                       frames, output_channels, profile,
+                                       stage, residual);
             if (!next) goto fail;
             free(state);
             state = next;

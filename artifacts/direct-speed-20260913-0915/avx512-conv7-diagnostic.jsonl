@@ -1,0 +1,14 @@
+{"type":"pair","stage":2,"residual":0,"channels":192,"dilation":1,"pair":1,"baseline":0.918440083,"avx512":1.326436139,"speedup":0.692412}
+{"type":"pair","stage":2,"residual":0,"channels":192,"dilation":1,"pair":2,"baseline":0.843355642,"avx512":1.482299710,"speedup":0.568951}
+{"type":"pair","stage":2,"residual":0,"channels":192,"dilation":1,"pair":3,"baseline":0.864025609,"avx512":1.518622165,"speedup":0.568954}
+{"type":"summary","stage":2,"residual":0,"frames":107520,"channels":192,"dilation":1,"rows":8192,"pairs":3,"baseline_median":0.864025609,"avx512_median":1.482299710,"speedup":0.582895,"max_abs":2.38418579e-06,"mae":5.71794695e-08,"packed_bytes":1032192,"pack_seconds":0.001038076}
+{"type":"pair","stage":2,"residual":1,"channels":192,"dilation":3,"pair":1,"baseline":0.883481503,"avx512":1.376098802,"speedup":0.642019}
+{"type":"pair","stage":2,"residual":1,"channels":192,"dilation":3,"pair":2,"baseline":0.911298433,"avx512":1.391255939,"speedup":0.655019}
+{"type":"pair","stage":2,"residual":1,"channels":192,"dilation":3,"pair":3,"baseline":0.848888444,"avx512":1.358132170,"speedup":0.625041}
+{"type":"summary","stage":2,"residual":1,"frames":107520,"channels":192,"dilation":3,"rows":8192,"pairs":3,"baseline_median":0.883481503,"avx512_median":1.376098802,"speedup":0.642019,"max_abs":3.09944153e-06,"mae":1.01096813e-07,"packed_bytes":1032192,"pack_seconds":0.000502321}
+{"type":"pair","stage":2,"residual":2,"channels":192,"dilation":9,"pair":1,"baseline":0.876618771,"avx512":1.536920825,"speedup":0.570373}
+{"type":"pair","stage":2,"residual":2,"channels":192,"dilation":9,"pair":2,"baseline":0.935404651,"avx512":1.717368428,"speedup":0.544673}
+{"type":"pair","stage":2,"residual":2,"channels":192,"dilation":9,"pair":3,"baseline":1.040146215,"avx512":1.520698915,"speedup":0.683992}
+{"type":"summary","stage":2,"residual":2,"frames":107520,"channels":192,"dilation":9,"rows":8192,"pairs":3,"baseline_median":0.935404651,"avx512_median":1.536920825,"speedup":0.608623,"max_abs":3.57627869e-06,"mae":7.38945178e-08,"packed_bytes":1032192,"pack_seconds":0.000638963}
+{"type":"pair","stage":3,"residual":0,"channels":96,"dilation":1,"pair":1,"baseline":0.480227209,"avx512":0.715343831,"speedup":0.671324}
+{"type":"pair","stage":3,"residual":0,"channels":96,"dilation":1,"pair":2,"baseline":0.979935404,"avx512":0.684885904,"speedup":1.430801}

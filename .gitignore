@@ -1,46 +1,67 @@
+# ---------------------------------------------------------------------------
+# irodori-c — C inference engine
+# ---------------------------------------------------------------------------
+
 # Build outputs
 *.o
 /irodori
+/irodori_asan
 /irodori-blas
 /irodori-mkl
 /irodori-mkl.bin
-/irodori_asan
-/irodori-baseline-*
+/irodori-onemkl
 /irodori-bench-worker
 /irodori-bench-worker-mkl
 /irodori-bench-worker-mkl.bin
+/irodori-bench-worker-onemkl
+/irodori-baseline-*
+/.irodori-*
 
-# Generated model assets and reference tensors
+# Model assets and golden fixtures (downloaded/exported locally; see README)
 /weights/
 /golden/
 
-# Local benchmark and profiling artifacts
+# Local benchmark scratch
 /.bench-*
 /.profile-*
-/.irodori-*
-/benchmark-results/
-*.wav
-*.log
+/downloads/
 
-# Local agent context and implementation notes
+# Evaluation artifacts: keep reports, tables, figures, JSON summaries and
+# source diffs; drop audio, raw tensors, binaries, logs and archives.
+/artifacts/**/*.wav
+/artifacts/**/*.f32
+/artifacts/**/*.bin
+/artifacts/**/*.tar.gz
+/artifacts/**/*.err
+/artifacts/**/*.stderr
+/artifacts/**/*.bak
+/artifacts/**/*.sha256
+/artifacts/**/dump/
+/artifacts/**/baseline/*
+!/artifacts/**/baseline/*.txt
+!/artifacts/**/baseline/*.diff
+/artifacts/**/bench-codec-*
+/artifacts/**/test-mkl-local
+/artifacts/**/onemkl-runtime/
+
+# Audio written by tests and examples
+*.wav
+
+# Local agent context and working notes (never published)
+/HANDOFF_*.md
+/OPTIMIZATION_PLAN*.md
+/PERFORMANCE.md
 /AGENT.md
 /AGENTS.md
-/agent.md
-/plan.md
-/PLAN.md
-/OPTIMIZATION_PLAN.md
-/PERFORMANCE.md
-/MODEL.md
-/model.md
 /CLAUDE.md
 /CODEX.md
 /docs/
 
-# Python caches and local environments
+# Python caches (tools/)
 __pycache__/
 *.py[cod]
-.venv/
 
 # Editor and OS files
-.DS_Store
 *.swp
+*~
+.DS_Store
