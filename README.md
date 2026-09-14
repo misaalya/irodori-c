@@ -45,24 +45,36 @@ RAM: 1.6–2.1 GB (int8) or 2.6–3.1 GB (FP32) per engine, depending on mode.
 
 ## Prebuilt release (no compiler needed)
 
-Linux x86-64 tarballs are published on the
-[Releases](https://github.com/misaalya/irodori-c/releases) page: bundled
-engine binaries (`irodori-onemkl` with the FP32/int8 oneMKL backend,
-`irodori-blas` on OpenBLAS) with their runtime libraries, the demo web UI,
-and a separate assets tarball with the tokenizer and codec exports. Only
-the 3 GB FP32 checkpoint is downloaded at setup time:
+If you just want to run the engine, skip the build entirely: every
+[release](https://github.com/misaalya/irodori-c/releases) ships ready-made
+Linux x86-64 binaries. You download two archives and one model file:
+
+| File | What it replaces |
+|---|---|
+| `irodori-c-<version>-linux-x86_64.tar.gz` (~135 MB) | `make`: the executables `bin/irodori-onemkl` (FP32 + int8) and `bin/irodori-blas` (FP32), their runtime libraries in `lib/`, the demo web UI, helper scripts |
+| `irodori-c-assets-<version>.tar.gz` (~346 MB) | the Python asset tools: `weights/tokenizer.bin` and the codec `weights/dacvae_*.safetensors` |
+| `model.safetensors` (~3 GB, from Hugging Face) | the checkpoint itself; fetched by `download-model.sh` |
 
 ```sh
-tar xzf irodori-c-<version>-linux-x86_64.tar.gz && cd irodori-c-<version>-linux-x86_64
-tar xzf ../irodori-c-assets-<version>.tar.gz --strip-components=1
-./download-model.sh          # or: ./download-model.sh phasefield-audio/Irodori-TTS-v4.1-Anime
-bin/irodori-onemkl --text 'こんにちは。' --model weights/model.safetensors \
-  --tokenizer weights/tokenizer.bin --decoder weights/dacvae_decoder.safetensors \
+V=v0.2.0
+curl -LO https://github.com/misaalya/irodori-c/releases/download/$V/irodori-c-$V-linux-x86_64.tar.gz
+curl -LO https://github.com/misaalya/irodori-c/releases/download/$V/irodori-c-assets-$V.tar.gz
+
+tar xzf irodori-c-$V-linux-x86_64.tar.gz          # -> irodori-c-v0.2.0-linux-x86_64/{bin,lib,demo,...}
+cd irodori-c-$V-linux-x86_64
+tar xzf ../irodori-c-assets-$V.tar.gz --strip-components=1   # adds weights/ next to bin/
+./download-model.sh                                 # weights/model.safetensors (or: ./download-model.sh phasefield-audio/Irodori-TTS-v4.1-Anime)
+
+IRO_NUM_THREADS=2 bin/irodori-onemkl --text 'こんにちは。' \
+  --model weights/model.safetensors --tokenizer weights/tokenizer.bin \
+  --decoder weights/dacvae_decoder.safetensors \
   --dit-precision int8 --codec-precision int8 --out out.wav
 ```
 
-For the web UI (`./run-demo.sh`) see the
-[demo repository](https://github.com/misaalya/irodori-c-demo).
+Requirements: Linux x86-64 with AVX2, glibc ≥ 2.35 (Ubuntu / Pop!_OS 22.04+),
+`curl`. The int8 flags need a CPU with AVX-512 VNNI; otherwise drop them or
+use `bin/irodori-blas`. For the browser UI run `./run-demo.sh` (needs
+`python3`) — see the [demo repository](https://github.com/misaalya/irodori-c-demo).
 
 Release binaries target the x86-64-v3 baseline (AVX2/FMA); oneMKL dispatches
 AVX-512/VNNI kernels at runtime. A native build (`-march=native`) is a few
