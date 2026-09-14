@@ -43,7 +43,28 @@ macOS builds use Accelerate.framework for the FP32 path.
 Disk: ~3 GB for the FP32 checkpoint plus ~0.4 GB for exported codec assets.
 RAM: 1.6–2.1 GB (int8) or 2.6–3.1 GB (FP32) per engine, depending on mode.
 
-## Quick start
+## Prebuilt release (no compiler needed)
+
+Linux x86-64 tarballs are published on the
+[Releases](https://github.com/misaalya/irodori-c/releases) page: bundled
+engine binaries (`irodori-onemkl` with the FP32/int8 oneMKL backend,
+`irodori-blas` on OpenBLAS) with their runtime libraries, the demo web UI,
+and a separate assets tarball with the tokenizer and codec exports. Only
+the 3 GB FP32 checkpoint is downloaded at setup time:
+
+```sh
+tar xzf irodori-c-<version>-linux-x86_64.tar.gz && cd irodori-c-<version>-linux-x86_64
+tar xzf ../irodori-c-assets-<version>.tar.gz --strip-components=1
+./download-model.sh          # or: ./download-model.sh phasefield-audio/Irodori-TTS-v4.1-Anime
+./run-demo.sh                # http://127.0.0.1:8080, or use bin/irodori-onemkl directly
+```
+
+Release binaries target the x86-64-v3 baseline (AVX2/FMA); oneMKL dispatches
+AVX-512/VNNI kernels at runtime. A native build (`-march=native`) is a few
+percent faster on the FP32 parts. `tools/package_release.sh` reproduces the
+tarballs.
+
+## Quick start (from source)
 
 ```sh
 git clone https://github.com/misaalya/irodori-tts.git

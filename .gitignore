@@ -65,3 +65,6 @@ __pycache__/
 *.swp
 *~
 .DS_Store
+
+# Release staging
+/dist/
