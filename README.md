@@ -56,8 +56,13 @@ the 3 GB FP32 checkpoint is downloaded at setup time:
 tar xzf irodori-c-<version>-linux-x86_64.tar.gz && cd irodori-c-<version>-linux-x86_64
 tar xzf ../irodori-c-assets-<version>.tar.gz --strip-components=1
 ./download-model.sh          # or: ./download-model.sh phasefield-audio/Irodori-TTS-v4.1-Anime
-./run-demo.sh                # http://127.0.0.1:8080, or use bin/irodori-onemkl directly
+bin/irodori-onemkl --text 'こんにちは。' --model weights/model.safetensors \
+  --tokenizer weights/tokenizer.bin --decoder weights/dacvae_decoder.safetensors \
+  --dit-precision int8 --codec-precision int8 --out out.wav
 ```
+
+For the web UI (`./run-demo.sh`) see the
+[demo repository](https://github.com/misaalya/irodori-c-demo).
 
 Release binaries target the x86-64-v3 baseline (AVX2/FMA); oneMKL dispatches
 AVX-512/VNNI kernels at runtime. A native build (`-march=native`) is a few
@@ -210,15 +215,11 @@ FP32 path.
 
 ## Demo web UI
 
-[`demo/`](https://github.com/misaalya/irodori-c-demo) (git submodule) is a
-minimal browser front-end that runs the engine binary — text, caption,
-reference WAV, steps, seed and fp32/int8 selection, with the engine's stage
-timings shown next to the audio. Python standard library only:
-
-```sh
-git submodule update --init
-python3 demo/server.py --binary ./irodori-onemkl --weights ./weights   # http://127.0.0.1:8080
-```
+A browser front-end for the engine lives in
+[misaalya/irodori-c-demo](https://github.com/misaalya/irodori-c-demo)
+(checked out here as the `demo/` submodule and bundled in the prebuilt
+release). Setup steps for the release and for source builds are in that
+repository's README.
 
 ## Engine API
 
