@@ -71,33 +71,61 @@ tarballs.
 
 ## Quick start (from source)
 
+Fresh clone to first audio, no Python required:
+
 ```sh
-git clone https://github.com/misaalya/irodori-tts.git
-cd irodori-tts/irodori-c
-git clone https://github.com/Aratako/Irodori-TTS.git ../Irodori-TTS   # upstream source, needed by tools/
+sudo apt install build-essential libopenblas-dev curl git     # Debian/Ubuntu
+git clone --recurse-submodules https://github.com/misaalya/irodori-c.git
+cd irodori-c
+make blas                    # ./irodori-blas (FP32, OpenBLAS)
+tools/fetch_assets.sh        # weights/: tokenizer + codec from the release, model (~3 GB) from Hugging Face
+IRO_NUM_THREADS=2 ./irodori-blas --text 'こんにちは。今日はいい天気ですね。' --steps 40 --seed 42 --out result.wav
+```
 
-python3 -m venv ../Irodori-TTS/.venv
-IRO_PY=../Irodori-TTS/.venv/bin/python
+`tools/fetch_assets.sh phasefield-audio/Irodori-TTS-v4.1-Anime` fetches the
+anime fine-tune instead. Set `IRO_NUM_THREADS` to the number of physical cores.
+
+### int8 build (oneMKL)
+
+The int8 paths need the oneMKL runtime, which pip can provide without an
+Intel installer:
+
+```sh
+python3 -m pip install --target .onemkl mkl mkl-include      # ~1 GB, once
+make irodori-onemkl MKL_ROOT=$PWD/.onemkl
+IRO_NUM_THREADS=2 ./irodori-onemkl --text 'こんにちは。' --dit-precision int8 --codec-precision int8 --out fast.wav
+```
+
+The engine picks the VNNI (`AVX512_E1`) MKL branch itself and refuses to
+start int8 on a backend that cannot accumulate exactly (see
+[Precision options](#precision-options)). `.onemkl/` is gitignored.
+
+### Web UI
+
+```sh
+python3 demo/server.py       # http://127.0.0.1:8080 (demo/ is the irodori-c-demo submodule)
+```
+
+### Regenerating the assets yourself (optional)
+
+`tokenizer.bin` and the codec safetensors in the release are produced from the
+upstream checkpoints with the tools below; use this if you want to rebuild
+them instead of downloading:
+
+```sh
+git clone https://github.com/Aratako/Irodori-TTS.git ../Irodori-TTS
+python3 -m venv ../Irodori-TTS/.venv && IRO_PY=../Irodori-TTS/.venv/bin/python
 "$IRO_PY" -m pip install --upgrade pip huggingface-hub safetensors torch --index-url https://download.pytorch.org/whl/cpu
-
-mkdir -p downloads/irodori downloads/dacvae weights
 ../Irodori-TTS/.venv/bin/hf download Aratako/Irodori-TTS-v4.1-Small model.safetensors tokenizer/tokenizer.json --local-dir downloads/irodori
 ../Irodori-TTS/.venv/bin/hf download Aratako/Semantic-DACVAE-Japanese-32dim weights.pth --local-dir downloads/dacvae
-
 cp downloads/irodori/model.safetensors weights/model.safetensors
 "$IRO_PY" tools/compile_tokenizer.py downloads/irodori/tokenizer/tokenizer.json weights/tokenizer.bin weights/tokenizer_vectors.json
 "$IRO_PY" tools/export_dacvae_decoder.py downloads/dacvae/weights.pth weights/dacvae_decoder.safetensors
 "$IRO_PY" tools/export_dacvae_encoder.py downloads/dacvae/weights.pth weights/dacvae_encoder.safetensors
-
-make blas            # ./irodori-blas (OpenBLAS, FP32)
 ```
 
-Generate speech (two threads = two physical cores on a typical laptop):
-
-```sh
-export IRO_NUM_THREADS=2
-./irodori-blas --text 'こんにちは。今日はいい天気ですね。' --steps 40 --seed 42 --out result.wav
-```
+The upstream checkout and venv are also what the benchmark and parity tools
+under `tools/` use.
 
 ## Usage
 
@@ -152,14 +180,9 @@ control paths unchanged and quantize **at engine init** from the FP32 file.
 | `--codec-precision int8` | Conv7/Conv1/ConvTranspose of the DACVAE decoder via a uint8 im2col with per-output-row scales (one exact int32 GEMM per block); residual term on the last stage. Snake activations, biases and the final tap stay FP32. | 63 MiB | decode ~2× faster |
 
 Backend requirements: the integer GEMM comes from oneMKL
-(`cblas_gemm_s8u8s32`). Build the standalone oneMKL target with `MKL_ROOT`
-pointing at a directory holding `include/mkl.h` and `lib/libmkl_rt.so.3`
-(for example a `pip install mkl mkl-include` prefix):
-
-```sh
-make irodori-onemkl MKL_ROOT=/path/to/onemkl
-IRO_NUM_THREADS=2 ./irodori-onemkl --text 'こんにちは。' --dit-precision int8 --codec-precision int8 --out fast.wav
-```
+(`cblas_gemm_s8u8s32`); `MKL_ROOT` must hold `include/mkl.h` and
+`lib/libmkl_rt.so.3` (the `pip install --target` layout from the quick start,
+or an oneAPI installation).
 
 The engine selects the `AVX512_E1` (VNNI) MKL branch when `MKL_CBWR` is
 unset and verifies at init that the backend accumulates exactly; the

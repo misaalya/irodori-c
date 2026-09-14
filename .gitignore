@@ -26,6 +26,7 @@
 /.profile-*
 /downloads/
 
+
 # Evaluation artifacts (benchmark runs, reports, audio) are kept local
 /artifacts/
 
@@ -53,3 +54,6 @@ __pycache__/
 
 # Release staging
 /dist/
+
+# Local oneMKL runtime from pip (make irodori-onemkl MKL_ROOT=$PWD/.onemkl)
+/.onemkl/
